@@ -1,130 +1,136 @@
+import streamlit as st
+import json
 import time
+import os
+from openai import OpenAI
 
+# =========================
+# CONFIG
+# =========================
+client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+
+USERS_FILE = "users.json"
 ACTIVE_USERS_FILE = "active_users.json"
+
+PROMPT_PEDAGOGIQUE = """
+Tu es un assistant pédagogique bienveillant.
+Explique clairement et simplement.
+Ne donne jamais directement la réponse.
+Guide l'élève avec des indices.
+"""
+
+# =========================
+# SESSION STATE
+# =========================
+if "connected" not in st.session_state:
+    st.session_state.connected = False
+if "username" not in st.session_state:
+    st.session_state.username = None
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# =========================
+# FICHIERS UTILISATEURS
+# =========================
+def load_users():
+    with open(USERS_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 def load_active_users():
     if not os.path.exists(ACTIVE_USERS_FILE):
         return {}
-    with open(ACTIVE_USERS_FILE, "r") as f:
+    with open(ACTIVE_USERS_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
 def save_active_users(data):
-    with open(ACTIVE_USERS_FILE, "w") as f:
+    with open(ACTIVE_USERS_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f)
 
-import streamlit as st
-import json
-import os
-from openai import OpenAI
-import docx
-import fitz  # PyMuPDF
+USERS = load_users()
 
-# ======================
-# CONFIG
-# ======================
-st.set_page_config(page_title="Assistant pédagogique", layout="wide")
+# =========================
+# PAGE LOGIN
+# =========================
+def afficher_page_login():
+    st.title("🔐 Connexion élève")
 
-client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    username = st.text_input("Identifiant")
+    password = st.text_input("Mot de passe", type="password")
 
-PROMPT_PEDAGOGIQUE = """
-Tu es un assistant pédagogique bienveillant.
-Explique clairement, simplement, avec des exemples si nécessaire. Ne dépasse pas 60 mots.
-Mais tu ne donnes jamais la réponse directement, tu guides progressivement l'élève.
-Voici le document de l'élève :
-"""
+    active_users = load_active_users()
 
-# ======================
-# UTILISATEURS
-# ======================
-with open("users.json") as f:
-    USERS = json.load(f)
+    if st.button("Connexion"):
+        if username in USERS and USERS[username] == password:
+            if username in active_users:
+                st.error("❌ Ce compte est déjà connecté ailleurs.")
+            else:
+                active_users[username] = time.time()
+                save_active_users(active_users)
 
-if "connected" not in st.session_state:
-    st.session_state.connected = False
-
-# ======================
-# LOGIN
-# ======================
-active_users = load_active_users()
-
-if st.button("Connexion"):
-    if username in USERS and USERS[username] == password:
-        if username in active_users:
-            st.error("Ce compte est déjà connecté ailleurs.")
+                st.session_state.connected = True
+                st.session_state.username = username
+                st.success("✅ Connexion réussie")
+                st.rerun()
         else:
-            active_users[username] = time.time()
-            save_active_users(active_users)
-            st.session_state.connected = True
-            st.session_state.username = username
-            st.success("Connexion réussie")
-            st.rerun()
-    else:
-        st.error("Identifiant ou mot de passe incorrect")
+            st.error("❌ Identifiant ou mot de passe incorrect")
 
-# ======================
-# INTERFACE
-# ======================
-st.title("🧠 Assistant pédagogique IA")
+# =========================
+# DECONNEXION
+# =========================
+def deconnexion():
+    active_users = load_active_users()
+    username = st.session_state.username
 
-col1, col2 = st.columns(2)
+    if username in active_users:
+        del active_users[username]
+        save_active_users(active_users)
 
-document_content = ""
+    st.session_state.connected = False
+    st.session_state.username = None
+    st.session_state.messages = []
+    st.rerun()
 
-# ======================
-# DOCUMENT
-# ======================
-with col1:
-    st.subheader("📄 Document de travail")
-    uploaded_file = st.file_uploader("Dépose ton document", type=["txt", "docx", "pdf"])
+# =========================
+# APPLICATION PRINCIPALE
+# =========================
+def afficher_application():
+    st.title("🧠 Assistant pédagogique IA")
 
-    if uploaded_file:
-        if uploaded_file.name.endswith(".txt"):
-            document_content = uploaded_file.read().decode("utf-8")
-            st.text_area("Contenu", document_content, height=400)
+    st.write(f"👤 Connecté en tant que : **{st.session_state.username}**")
 
-        elif uploaded_file.name.endswith(".docx"):
-            doc = docx.Document(uploaded_file)
-            document_content = "\n".join([p.text for p in doc.paragraphs])
-            st.text_area("Contenu", document_content, height=400)
+    if st.button("🚪 Déconnexion"):
+        deconnexion()
 
-        elif uploaded_file.name.endswith(".pdf"):
-            pdf = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-            for page in pdf:
-                document_content += page.get_text()
-            st.info("PDF chargé (texte extrait pour l’IA, non visible par l’élève)")
+    st.divider()
 
-# ======================
-# CHAT
-# ======================
-with col2:
-    st.subheader("📝 Rappel de cours")
-    mots_cles = st.text_input("Mots-clés")
+    # Affichage du chat
+    for role, msg in st.session_state.messages:
+        if role == "user":
+            st.markdown(f"**👤 Toi :** {msg}")
+        else:
+            st.markdown(f"**🤖 Assistant :** {msg}")
 
-    if st.button("Obtenir le rappel"):
-        prompt_rappel = f"""
-Tu es un assistant pédagogique bienveillant.
-Fais un rappel de cours clair basé sur ces mots-clés : {mots_cles}
-Maximum 100 mots.
-"""
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt_rappel}]
-        )
-        st.markdown("**📚 Rappel de cours :**")
-        st.write(response.choices[0].message.content)
-
-    st.subheader("💬 Chat pédagogique")
-    question = st.text_area("Ta question")
+    question = st.text_input("Pose ta question")
 
     if st.button("Envoyer"):
-        prompt = PROMPT_PEDAGOGIQUE + "\n\nDOCUMENT:\n" + document_content + "\n\nQUESTION:\n" + question
+        if question:
+            prompt = PROMPT_PEDAGOGIQUE + "\nQUESTION : " + question
 
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}]
-        )
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}]
+            )
 
-        st.markdown("**🤖 Assistant :**")
-        st.write(response.choices[0].message.content)
+            answer = response.choices[0].message.content
 
+            st.session_state.messages.append(("user", question))
+            st.session_state.messages.append(("assistant", answer))
+            st.rerun()
 
+# =========================
+# ROUTEUR PRINCIPAL
+# =========================
+if not st.session_state.connected:
+    afficher_page_login()
+else:
+    afficher_application()
