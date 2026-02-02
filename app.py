@@ -3,8 +3,11 @@ import json
 import os
 import time
 from openai import OpenAI
+from PIL import Image
+import io
 import docx
 import fitz  # PyMuPDF
+from pdf2image import convert_from_bytes  # pip install pdf2image
 
 # ======================
 # CONFIG
@@ -57,6 +60,8 @@ if "username" not in st.session_state:
     st.session_state.username = None
 if "document_content" not in st.session_state:
     st.session_state.document_content = ""
+if "document_images" not in st.session_state:
+    st.session_state.document_images = []
 
 clean_expired_sessions()
 
@@ -115,22 +120,47 @@ with col_doc:
 
     if uploaded_file:
         content = ""
+        images = []
 
+        # ---------- TXT ----------
         if uploaded_file.name.endswith(".txt"):
             content = uploaded_file.read().decode("utf-8")
+            # convertir texte en image simple pour affichage
+            img = Image.new("RGB", (600, 800), color="white")
+            from PIL import ImageDraw
+            draw = ImageDraw.Draw(img)
+            draw.text((10, 10), content[:5000], fill="black")  # afficher seulement les 5000 premiers caractères
+            images.append(img)
 
+        # ---------- DOCX ----------
         elif uploaded_file.name.endswith(".docx"):
             doc = docx.Document(uploaded_file)
             content = "\n".join([p.text for p in doc.paragraphs])
+            # convertir chaque paragraphe en image
+            img = Image.new("RGB", (600, max(800, 20*len(doc.paragraphs))), color="white")
+            draw = ImageDraw.Draw(img)
+            y = 10
+            for p in doc.paragraphs:
+                draw.text((10, y), p.text, fill="black")
+                y += 20
+            images.append(img)
 
+        # ---------- PDF ----------
         elif uploaded_file.name.endswith(".pdf"):
-            pdf = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-            for page in pdf:
+            pdf_bytes = uploaded_file.read()
+            pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            for page in pdf_doc:
                 content += page.get_text()
+            pdf_images = convert_from_bytes(pdf_bytes, dpi=150)
+            images.extend(pdf_images)
 
         st.session_state.document_content = content
-        st.subheader("📄 Document en consultation")
-        st.text_area("Contenu du document", content, height=500)
+        st.session_state.document_images = images
+
+        # Affichage des images
+        st.subheader("📄 Aperçu du document")
+        for img in images:
+            st.image(img, use_column_width=True)
 
 # ======================
 # CHAT + RAPPEL DE COURS (droite)
