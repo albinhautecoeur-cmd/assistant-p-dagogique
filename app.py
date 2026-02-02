@@ -140,4 +140,5 @@ with col_doc:
                 images = convert_from_bytes(pdf_bytes, dpi=150, poppler_path=POPPLER_PATH)
                 st.session_state.document_images = images
                 for img in images:
-                    st.image(im
+                    st.image(im)
+
