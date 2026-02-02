@@ -88,6 +88,7 @@ USERS = load_users()
 # ======================
 if not st.session_state.connected:
     st.title("🔐 Connexion élève")
+
     username = st.text_input("Identifiant")
     password = st.text_input("Mot de passe", type="password")
 
@@ -124,7 +125,7 @@ if st.button("🚪 Déconnexion"):
     st.experimental_set_query_params()  # simple refresh
     st.stop()
 
-col_doc, col_chat = st.columns([1, 2])  # document plus étroit que le chat
+col_doc, col_chat = st.columns([1, 2])
 
 # ======================
 # DOCUMENT
@@ -150,10 +151,8 @@ with col_doc:
             doc = docx.Document(uploaded_file)
             content = "\n".join([p.text for p in doc.paragraphs])
             st.session_state.document_content = content
-            img_text = text_to_image(content)
-            images = [img_text]
+            images = [text_to_image(content)]
 
-            # Ajouter les images intégrées dans le doc
             for rel in doc.part._rels:
                 rel_obj = doc.part._rels[rel]
                 if "image" in rel_obj.target_ref:
@@ -223,3 +222,4 @@ with col_chat:
             )
             st.markdown("**🤖 Assistant :**")
             st.write(response.choices[0].message.content)
+
