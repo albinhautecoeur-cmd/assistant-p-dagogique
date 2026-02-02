@@ -80,8 +80,8 @@ if "document_content" not in st.session_state:
 if "document_images" not in st.session_state:
     st.session_state.document_images = []
 
-active_users = clean_expired_sessions()
 USERS = load_users()
+active_users = clean_expired_sessions()
 
 # ======================
 # LOGIN
@@ -93,11 +93,14 @@ if not st.session_state.connected:
     password = st.text_input("Mot de passe", type="password")
 
     if st.button("Connexion"):
+        # ✅ Vérification en temps réel pour empêcher double connexion
         active_users = clean_expired_sessions()
         if username in USERS and USERS[username] == password:
             if username in active_users:
-                st.error("❌ Ce compte est déjà connecté ailleurs.")
+                st.error("❌ Ce compte est déjà connecté sur un autre appareil.")
             else:
+                # Ajouter le compte aux sessions actives
+                active_users = load_active_users()
                 active_users[username] = time.time()
                 save_active_users(active_users)
                 st.session_state.connected = True
@@ -122,7 +125,7 @@ if st.button("🚪 Déconnexion"):
     st.session_state.username = None
     st.session_state.document_content = ""
     st.session_state.document_images = []
-    st.experimental_set_query_params()  # simple refresh
+    st.experimental_set_query_params()
     st.stop()
 
 col_doc, col_chat = st.columns([1, 2])
@@ -152,7 +155,6 @@ with col_doc:
             content = "\n".join([p.text for p in doc.paragraphs])
             st.session_state.document_content = content
             images = [text_to_image(content)]
-
             for rel in doc.part._rels:
                 rel_obj = doc.part._rels[rel]
                 if "image" in rel_obj.target_ref:
@@ -222,4 +224,3 @@ with col_chat:
             )
             st.markdown("**🤖 Assistant :**")
             st.write(response.choices[0].message.content)
-
