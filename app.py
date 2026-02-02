@@ -112,7 +112,7 @@ if not st.session_state.connected:
 # ======================
 # INTERFACE
 # ======================
-st.title("🧠 Assistant pédagogique IA")
+st.title("🧠 Mon Assistant pédagogique")
 
 if st.button("🚪 Déconnexion"):
     active_users = load_active_users()
@@ -231,3 +231,4 @@ with col_chat:
         st.markdown("**🤖 Assistant :**")
         st.write(msg["answer"])
         st.markdown("---")
+
