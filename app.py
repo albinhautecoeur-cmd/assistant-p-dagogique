@@ -53,11 +53,12 @@ def clean_expired_sessions():
     return updated
 
 def text_to_image(text, width=600, font_size=16):
-    """Convertit un texte en image pour affichage"""
-    lines = text.split('\n')
+    """Convertit un texte (TXT ou DOCX) en image pour affichage"""
     font = ImageFont.load_default()
-    # Estimation hauteur
-    line_height = font.getsize('hg')[1] + 4
+    lines = text.split('\n')
+    dummy_img = Image.new("RGB", (width, 1000))
+    draw = ImageDraw.Draw(dummy_img)
+    line_height = draw.textbbox((0,0), "Hg", font=font)[3] + 4
     height = line_height * len(lines) + 20
     img = Image.new("RGB", (width, height), color="white")
     draw = ImageDraw.Draw(img)
@@ -79,7 +80,6 @@ if "document_content" not in st.session_state:
 if "document_images" not in st.session_state:
     st.session_state.document_images = []
 
-# Nettoyage des sessions expirées
 active_users = clean_expired_sessions()
 USERS = load_users()
 
@@ -88,7 +88,6 @@ USERS = load_users()
 # ======================
 if not st.session_state.connected:
     st.title("🔐 Connexion élève")
-
     username = st.text_input("Identifiant")
     password = st.text_input("Mot de passe", type="password")
 
@@ -154,7 +153,7 @@ with col_doc:
             img_text = text_to_image(content)
             images = [img_text]
 
-            # Extraire images intégrées dans Word
+            # Ajouter les images intégrées dans le doc
             for rel in doc.part._rels:
                 rel_obj = doc.part._rels[rel]
                 if "image" in rel_obj.target_ref:
@@ -162,7 +161,6 @@ with col_doc:
                     img = Image.open(io.BytesIO(image_data))
                     img.thumbnail((600, 800))
                     images.append(img)
-
             st.session_state.document_images = images
             st.image(images, use_column_width=True)
 
@@ -180,8 +178,7 @@ with col_doc:
                 images.append(img)
             st.session_state.document_content = content
             st.session_state.document_images = images
-            if images:
-                st.image(images, use_column_width=True)
+            st.image(images, use_column_width=True)
 
 # ======================
 # RAPPEL DE COURS
