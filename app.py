@@ -140,5 +140,56 @@ with col_doc:
                 images = convert_from_bytes(pdf_bytes, dpi=150, poppler_path=POPPLER_PATH)
                 st.session_state.document_images = images
                 for img in images:
-                    st.image(im)
+                    st.image(img, use_column_width=True)
+                # Texte pour l'IA
+                pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+                text_pdf = ""
+                for page in pdf_doc:
+                    text_pdf += page.get_text()
+                st.session_state.document_content = text_pdf
+            except Exception as e:
+                st.error(f"Erreur PDF : {e}")
 
+# ======================
+# CHAT ET RAPPEL DE COURS
+# ======================
+with col_chat:
+    # Rappel de cours
+    st.subheader("📝 Rappel de cours")
+    mots_cles = st.text_input("Mots-clés")
+
+    if st.button("Obtenir le rappel"):
+        if mots_cles:
+            prompt_rappel = f"""
+Tu es un assistant pédagogique bienveillant.
+Fais un rappel de cours clair basé sur ces mots-clés : {mots_cles}
+Maximum 100 mots.
+"""
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt_rappel}]
+            )
+            st.markdown("**📚 Rappel de cours :**")
+            st.write(response.choices[0].message.content)
+
+    # Chat pédagogique
+    st.subheader("💬 Chat pédagogique")
+    question = st.text_area("Ta question")
+
+    if st.button("Envoyer"):
+        if question:
+            prompt = (
+                PROMPT_PEDAGOGIQUE
+                + "\n\nDOCUMENT:\n"
+                + st.session_state.document_content
+                + "\n\nQUESTION:\n"
+                + question
+            )
+
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}]
+            )
+
+            st.markdown("**🤖 Assistant :**")
+            st.write(response.choices[0].message.content)
