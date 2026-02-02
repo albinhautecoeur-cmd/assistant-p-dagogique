@@ -2,11 +2,12 @@ import streamlit as st
 import json
 import os
 import time
+import io
 from openai import OpenAI
+from PIL import Image
 import docx
 import fitz  # PyMuPDF
 from pdf2image import convert_from_bytes
-from PIL import Image
 
 # ======================
 # CONFIG
@@ -27,10 +28,8 @@ USERS_FILE = "users.json"
 ACTIVE_USERS_FILE = "active_users.json"
 SESSION_TIMEOUT = 3600  # 1 heure
 
-POPPLER_PATH = r"C:\Users\ghysc\OneDrive\Bureau\assistant pédagogique\poppler-25.12.0\Library\bin"  # <--- ton chemin Poppler
-
 # ======================
-# UTILITAIRES
+# FONCTIONS UTILITAIRES
 # ======================
 def load_users():
     with open(USERS_FILE, "r") as f:
@@ -61,8 +60,8 @@ if "username" not in st.session_state:
     st.session_state.username = None
 if "document_content" not in st.session_state:
     st.session_state.document_content = ""
-if "document_images" not in st.session_state:
-    st.session_state.document_images = []
+if "document_image" not in st.session_state:
+    st.session_state.document_image = None
 
 clean_expired_sessions()
 
@@ -88,10 +87,27 @@ if not st.session_state.connected:
                 st.session_state.connected = True
                 st.session_state.username = username
                 st.success("Connexion réussie")
-                st.rerun()
+                st.experimental_rerun()
         else:
             st.error("Identifiant ou mot de passe incorrect")
+
     st.stop()
+
+# ======================
+# AUTO-DECONNEXION
+# ======================
+import atexit
+
+def auto_logout():
+    if st.session_state.connected and st.session_state.username:
+        active_users = load_active_users()
+        if st.session_state.username in active_users:
+            del active_users[st.session_state.username]
+            save_active_users(active_users)
+        st.session_state.connected = False
+        st.session_state.username = None
+
+atexit.register(auto_logout)
 
 # ======================
 # INTERFACE
@@ -99,62 +115,59 @@ if not st.session_state.connected:
 st.title("🧠 Assistant pédagogique IA")
 
 if st.button("🚪 Déconnexion"):
-    active_users = load_active_users()
-    if st.session_state.username in active_users:
-        del active_users[st.session_state.username]
-        save_active_users(active_users)
+    auto_logout()
+    st.experimental_rerun()
 
-    st.session_state.connected = False
-    st.session_state.username = None
-    st.rerun()
-
-# Colonnes principales
-col_doc, col_chat = st.columns([1, 2])  # 1/3 document, 2/3 chat
+col1, col2 = st.columns([1,1.2])  # colonnes un peu redimensionnées
 
 # ======================
 # DOCUMENT
 # ======================
-with col_doc:
+with col1:
     st.subheader("📄 Document de travail")
     uploaded_file = st.file_uploader("Dépose ton document", type=["txt", "docx", "pdf"])
 
     if uploaded_file:
-        st.session_state.document_content = ""
-        st.session_state.document_images = []
+        content = ""
+        image_preview = None
 
+        # TXT
         if uploaded_file.name.endswith(".txt"):
             content = uploaded_file.read().decode("utf-8")
-            st.session_state.document_content = content
-            st.text_area("Contenu du document", content, height=400)
+            st.text_area("Contenu du document (texte brut)", content, height=400)
 
+        # DOCX
         elif uploaded_file.name.endswith(".docx"):
             doc = docx.Document(uploaded_file)
             content = "\n".join([p.text for p in doc.paragraphs])
-            st.session_state.document_content = content
-            st.text_area("Contenu du document", content, height=400)
+            # Convertir docx en image simple : capture page par page
+            images = []
+            for rel in doc.part._rels:
+                rel_obj = doc.part._rels[rel]
+                if "image" in rel_obj.target_ref:
+                    img_data = rel_obj.target_part.blob
+                    img = Image.open(io.BytesIO(img_data))
+                    img.thumbnail((600, 800))
+                    images.append(img)
+            if images:
+                st.image(images, caption="Document (images)", use_column_width=True)
 
+        # PDF
         elif uploaded_file.name.endswith(".pdf"):
-            # Convertir PDF en images
-            try:
-                pdf_bytes = uploaded_file.read()
-                images = convert_from_bytes(pdf_bytes, dpi=150, poppler_path=POPPLER_PATH)
-                st.session_state.document_images = images
-                for img in images:
-                    st.image(img, use_column_width=True)
-                # Texte pour l'IA
-                pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-                text_pdf = ""
-                for page in pdf_doc:
-                    text_pdf += page.get_text()
-                st.session_state.document_content = text_pdf
-            except Exception as e:
-                st.error(f"Erreur PDF : {e}")
+            pdf = fitz.open(stream=uploaded_file.read(), filetype="pdf")
+            for page in pdf:
+                content += page.get_text()
+            # Convertir PDF en images pour affichage
+            uploaded_file.seek(0)
+            pages = convert_from_bytes(uploaded_file.read(), dpi=150)
+            st.image(pages, caption="Document (images)", use_column_width=True)
+
+        st.session_state.document_content = content
 
 # ======================
-# CHAT ET RAPPEL DE COURS
+# RAPPEL DE COURS
 # ======================
-with col_chat:
-    # Rappel de cours
+with col2:
     st.subheader("📝 Rappel de cours")
     mots_cles = st.text_input("Mots-clés")
 
@@ -172,7 +185,10 @@ Maximum 100 mots.
             st.markdown("**📚 Rappel de cours :**")
             st.write(response.choices[0].message.content)
 
-    # Chat pédagogique
+# ======================
+# CHAT
+# ======================
+with col2:
     st.subheader("💬 Chat pédagogique")
     question = st.text_area("Ta question")
 
