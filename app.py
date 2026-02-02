@@ -79,7 +79,7 @@ if "document_images" not in st.session_state:
 if "question_input" not in st.session_state:
     st.session_state.question_input = ""
 if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []  # <-- HISTORIQUE
+    st.session_state.chat_history = []
 
 USERS = load_users()
 active_users = clean_expired_sessions()
@@ -224,7 +224,8 @@ with col_chat:
         st.text_area("Ta question", key="question_input")
         st.form_submit_button("Envoyer", on_click=submit_question)
 
-    for msg in st.session_state.chat_history:
+    # 🔁 AFFICHAGE DU PLUS RÉCENT AU PLUS ANCIEN
+    for msg in reversed(st.session_state.chat_history):
         st.markdown("**❓ Question :**")
         st.write(msg["question"])
         st.markdown("**🤖 Assistant :**")
