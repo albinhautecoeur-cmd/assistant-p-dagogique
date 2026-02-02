@@ -5,9 +5,8 @@ import time
 from openai import OpenAI
 import docx
 import fitz  # PyMuPDF
-from PIL import Image
-from io import BytesIO
 from pdf2image import convert_from_bytes
+from PIL import Image
 
 # ======================
 # CONFIG
@@ -28,8 +27,10 @@ USERS_FILE = "users.json"
 ACTIVE_USERS_FILE = "active_users.json"
 SESSION_TIMEOUT = 3600  # 1 heure
 
+POPPLER_PATH = r"C:\Users\ghysc\OneDrive\Bureau\assistant pédagogique\poppler-25.12.0\Library\bin"  # <--- ton chemin Poppler
+
 # ======================
-# FONCTIONS UTILITAIRES
+# UTILITAIRES
 # ======================
 def load_users():
     with open(USERS_FILE, "r") as f:
@@ -102,70 +103,41 @@ if st.button("🚪 Déconnexion"):
     if st.session_state.username in active_users:
         del active_users[st.session_state.username]
         save_active_users(active_users)
+
     st.session_state.connected = False
     st.session_state.username = None
     st.rerun()
 
-# ======================
-# COLONNES DOCUMENT / CHAT
-# ======================
-col_doc, col_chat = st.columns([1, 1.5])  # document plus petit que chat
+# Colonnes principales
+col_doc, col_chat = st.columns([1, 2])  # 1/3 document, 2/3 chat
 
 # ======================
 # DOCUMENT
 # ======================
 with col_doc:
-    st.subheader("📄 Document")
+    st.subheader("📄 Document de travail")
     uploaded_file = st.file_uploader("Dépose ton document", type=["txt", "docx", "pdf"])
 
     if uploaded_file:
-        st.session_state.document_images = []  # réinitialiser
-        content_text = ""
+        st.session_state.document_content = ""
+        st.session_state.document_images = []
 
         if uploaded_file.name.endswith(".txt"):
-            content_text = uploaded_file.read().decode("utf-8")
-            st.text_area("Contenu du document (pour IA)", content_text, height=400)
-            st.session_state.document_images = []  # pas d'image pour txt
+            content = uploaded_file.read().decode("utf-8")
+            st.session_state.document_content = content
+            st.text_area("Contenu du document", content, height=400)
 
         elif uploaded_file.name.endswith(".docx"):
             doc = docx.Document(uploaded_file)
-            content_text = "\n".join([p.text for p in doc.paragraphs])
-            st.text_area("Contenu du document (pour IA)", content_text, height=400)
-            # Affichage image non dispo pour DOCX simple, peut être amélioré
+            content = "\n".join([p.text for p in doc.paragraphs])
+            st.session_state.document_content = content
+            st.text_area("Contenu du document", content, height=400)
 
         elif uploaded_file.name.endswith(".pdf"):
-            pdf_bytes = uploaded_file.read()
-            # Texte pour IA
-            pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-            for page in pdf_doc:
-                content_text += page.get_text()
-            st.session_state.document_content = content_text
-            # Conversion PDF -> images pour affichage
-            images = convert_from_bytes(pdf_bytes, dpi=150)
-            for img in images:
-                st.image(img, use_column_width=True)
-                st.session_state.document_images.append(img)
-
-        st.session_state.document_content = content_text
-
-# ======================
-# CHAT ET RAPPEL
-# ======================
-with col_chat:
-    st.subheader("📝 Rappel de cours")
-    mots_cles = st.text_input("Mots-clés pour rappel")
-
-    if st.button("Obtenir le rappel"):
-        if mots_cles:
-            prompt_rappel = f"""
-Tu es un assistant pédagogique bienveillant.
-Fais un rappel de cours clair basé sur ces mots-clés : {mots_cles}
-Maximum 100 mots.
-"""
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt_rappel}]
-            )
-            st.markdown("**📚 Rappel de cours :**")
-            st.write(response.cho)
-
+            # Convertir PDF en images
+            try:
+                pdf_bytes = uploaded_file.read()
+                images = convert_from_bytes(pdf_bytes, dpi=150, poppler_path=POPPLER_PATH)
+                st.session_state.document_images = images
+                for img in images:
+                    st.image(im
