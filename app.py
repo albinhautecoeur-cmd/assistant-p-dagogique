@@ -104,13 +104,13 @@ if st.button("🚪 Déconnexion"):
     st.rerun()
 
 # Colonnes : gauche pour document, droite pour chat + rappel
-col1, col2 = st.columns([1, 2])
+col_doc, col_chat = st.columns([1, 2])  # proportion 1:2
 
 # ======================
-# DOCUMENT
+# DOCUMENT (gauche)
 # ======================
-with col1:
-    st.subheader("📄 Déposer un document")
+with col_doc:
+    st.subheader("📄 Document de travail")
     uploaded_file = st.file_uploader("Dépose ton document", type=["txt", "docx", "pdf"])
 
     if uploaded_file:
@@ -129,11 +129,13 @@ with col1:
                 content += page.get_text()
 
         st.session_state.document_content = content
+        st.subheader("📄 Document en consultation")
+        st.text_area("Contenu du document", content, height=500)
 
 # ======================
-# CHAT + RAPPEL DE COURS + DOCUMENT visible
+# CHAT + RAPPEL DE COURS (droite)
 # ======================
-with col2:
+with col_chat:
     # 🔹 Rappel de cours
     st.subheader("📝 Rappel de cours")
     mots_cles = st.text_input("Mots-clés")
@@ -173,8 +175,3 @@ Maximum 100 mots.
 
             st.markdown("**🤖 Assistant :**")
             st.write(response.choices[0].message.content)
-
-    # 🔹 Afficher le document à côté du chat
-    if st.session_state.document_content:
-        st.subheader("📄 Document en consultation")
-        st.text_area("Document :", st.session_state.document_content, height=400)
