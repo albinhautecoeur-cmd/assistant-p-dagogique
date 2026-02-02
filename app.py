@@ -24,7 +24,7 @@ Voici le document de l'élève :
 
 USERS_FILE = "users.json"
 ACTIVE_USERS_FILE = "active_users.json"
-SESSION_TIMEOUT = 60  # secondes
+SESSION_TIMEOUT = 60
 
 # ======================
 # UTILITAIRES
@@ -80,6 +80,8 @@ if "last_question" not in st.session_state:
     st.session_state.last_question = ""
 if "last_answer" not in st.session_state:
     st.session_state.last_answer = ""
+if "question_input" not in st.session_state:
+    st.session_state.question_input = ""
 
 USERS = load_users()
 active_users = clean_expired_sessions()
@@ -170,7 +172,7 @@ with col_doc:
         st.image(images, use_column_width=True)
 
 # ======================
-# RAPPEL DE COURS
+# RAPPEL
 # ======================
 with col_chat:
     st.subheader("📝 Rappel de cours")
@@ -193,22 +195,17 @@ Maximum 100 mots.
 # ======================
 # CHAT
 # ======================
-with col_chat:
-    st.subheader("💬 Chat pédagogique")
-
-    with st.form("chat_form"):
-        question = st.text_area("Ta question", key="question_input")
-        submitted = st.form_submit_button("Envoyer")
-
-    if submitted and question:
-        st.session_state.last_question = question
+def submit_question():
+    q = st.session_state.question_input
+    if q:
+        st.session_state.last_question = q
 
         prompt = (
             PROMPT_PEDAGOGIQUE
             + "\n\nDOCUMENT:\n"
             + st.session_state.document_content
             + "\n\nQUESTION:\n"
-            + question
+            + q
         )
 
         response = client.chat.completions.create(
@@ -218,6 +215,13 @@ with col_chat:
 
         st.session_state.last_answer = response.choices[0].message.content
         st.session_state.question_input = ""
+
+with col_chat:
+    st.subheader("💬 Chat pédagogique")
+
+    with st.form("chat_form"):
+        st.text_area("Ta question", key="question_input")
+        st.form_submit_button("Envoyer", on_click=submit_question)
 
     if st.session_state.last_question:
         st.markdown("**❓ Question :**")
