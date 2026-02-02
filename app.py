@@ -103,13 +103,14 @@ if st.button("🚪 Déconnexion"):
     st.session_state.username = None
     st.rerun()
 
-col1, col2 = st.columns(2)
+# Colonnes : gauche pour document, droite pour chat + rappel
+col1, col2 = st.columns([1, 2])
 
 # ======================
 # DOCUMENT
 # ======================
 with col1:
-    st.subheader("📄 Document de travail")
+    st.subheader("📄 Déposer un document")
     uploaded_file = st.file_uploader("Dépose ton document", type=["txt", "docx", "pdf"])
 
     if uploaded_file:
@@ -117,50 +118,23 @@ with col1:
 
         if uploaded_file.name.endswith(".txt"):
             content = uploaded_file.read().decode("utf-8")
-            st.text_area("Contenu du document", content, height=400)
 
         elif uploaded_file.name.endswith(".docx"):
             doc = docx.Document(uploaded_file)
             content = "\n".join([p.text for p in doc.paragraphs])
-            st.text_area("Contenu du document", content, height=400)
 
         elif uploaded_file.name.endswith(".pdf"):
             pdf = fitz.open(stream=uploaded_file.read(), filetype="pdf")
             for page in pdf:
                 content += page.get_text()
-            st.info("PDF chargé (contenu transmis à l’IA, non affiché)")
 
         st.session_state.document_content = content
-        if uploaded_file:
-    content = ""
-
-    if uploaded_file.name.endswith(".txt"):
-        content = uploaded_file.read().decode("utf-8")
-    elif uploaded_file.name.endswith(".docx"):
-        doc = docx.Document(uploaded_file)
-        content = "\n".join([p.text for p in doc.paragraphs])
-    elif uploaded_file.name.endswith(".pdf"):
-        pdf = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-        for page in pdf:
-            content += page.get_text()
-
-    st.session_state.document_content = content
-
-    # ---------------------
-    # Afficher le document à côté du chat
-    # ---------------------
-    with col2:  # colonne chat
-        st.subheader("📄 Document en consultation")
-        if uploaded_file.name.endswith(".pdf"):
-            st.info("PDF chargé (texte extrait pour l’IA)")
-        else:
-            st.text_area("Document :", content, height=400)
-
 
 # ======================
-# RAPPEL DE COURS
+# CHAT + RAPPEL DE COURS + DOCUMENT visible
 # ======================
 with col2:
+    # 🔹 Rappel de cours
     st.subheader("📝 Rappel de cours")
     mots_cles = st.text_input("Mots-clés")
 
@@ -178,10 +152,7 @@ Maximum 100 mots.
             st.markdown("**📚 Rappel de cours :**")
             st.write(response.choices[0].message.content)
 
-# ======================
-# CHAT
-# ======================
-with col2:
+    # 🔹 Chat pédagogique
     st.subheader("💬 Chat pédagogique")
     question = st.text_area("Ta question")
 
@@ -203,4 +174,7 @@ with col2:
             st.markdown("**🤖 Assistant :**")
             st.write(response.choices[0].message.content)
 
-
+    # 🔹 Afficher le document à côté du chat
+    if st.session_state.document_content:
+        st.subheader("📄 Document en consultation")
+        st.text_area("Document :", st.session_state.document_content, height=400)
