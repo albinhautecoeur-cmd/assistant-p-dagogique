@@ -12,7 +12,6 @@ from PIL import Image
 # CONFIG
 # ======================
 st.set_page_config(page_title="Assistant pédagogique", layout="wide")
-
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 PROMPT_PEDAGOGIQUE = """
@@ -63,7 +62,6 @@ if "document_images" not in st.session_state:
     st.session_state.document_images = []
 
 clean_expired_sessions()
-
 USERS = load_users()
 active_users = load_active_users()
 
@@ -72,11 +70,11 @@ active_users = load_active_users()
 # ======================
 if not st.session_state.connected:
     st.title("🔐 Connexion élève")
-
     username = st.text_input("Identifiant")
     password = st.text_input("Mot de passe", type="password")
 
-    if st.button("Connexion"):
+    login_clicked = st.button("Connexion")
+    if login_clicked:
         if username in USERS and USERS[username] == password:
             if username in active_users:
                 st.error("❌ Ce compte est déjà connecté ailleurs.")
@@ -95,6 +93,18 @@ if not st.session_state.connected:
 # INTERFACE
 # ======================
 st.title("🧠 Assistant pédagogique IA")
+
+# Bouton de déconnexion
+if st.button("🚪 Déconnexion"):
+    active_users = load_active_users()
+    if st.session_state.username in active_users:
+        del active_users[st.session_state.username]
+        save_active_users(active_users)
+    st.session_state.connected = False
+    st.session_state.username = None
+    st.session_state.document_content = ""
+    st.session_state.document_images = []
+    st.experimental_rerun()
 
 col_doc, col_chat = st.columns([1,1])
 
@@ -122,7 +132,6 @@ with col_doc:
             pdf = fitz.open(stream=uploaded_file.read(), filetype="pdf")
             for page in pdf:
                 content += page.get_text()
-            # Génération images pour l'affichage
             uploaded_file.seek(0)
             pages = convert_from_bytes(uploaded_file.read(), dpi=150)
             for page in pages:
@@ -137,50 +146,38 @@ with col_doc:
 # CHAT + RAPPEL
 # --------------------
 with col_chat:
-    # Déconnexion
-    if st.button("🚪 Déconnexion"):
-        active_users = load_active_users()
-        if st.session_state.username in active_users:
-            del active_users[st.session_state.username]
-            save_active_users(active_users)
-        st.session_state.connected = False
-        st.session_state.username = None
-        st.session_state.document_content = ""
-        st.session_state.document_images = []
-        st.experimental_rerun()
-
     # Rappel de cours
     st.subheader("📝 Rappel de cours")
     mots_cles = st.text_input("Mots-clés pour rappel")
-    if st.button("Obtenir le rappel"):
-        if mots_cles:
-            prompt_rappel = f"""
+    rappel_clicked = st.button("Obtenir le rappel")
+    if rappel_clicked and mots_cles:
+        prompt_rappel = f"""
 Tu es un assistant pédagogique bienveillant.
 Fais un rappel de cours clair basé sur ces mots-clés : {mots_cles}
 Maximum 100 mots.
 """
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt_rappel}]
-            )
-            st.markdown("**📚 Rappel de cours :**")
-            st.write(response.choices[0].message.content)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt_rappel}]
+        )
+        st.markdown("**📚 Rappel de cours :**")
+        st.write(response.choices[0].message.content)
 
     # Chat
     st.subheader("💬 Chat pédagogique")
     question = st.text_area("Ta question")
-    if st.button("Envoyer"):
-        if question:
-            prompt = (
-                PROMPT_PEDAGOGIQUE
-                + "\n\nDOCUMENT:\n"
-                + st.session_state.document_content
-                + "\n\nQUESTION:\n"
-                + question
-            )
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}]
-            )
-            st.markdown("**🤖 Assistant :**")
-            st.write(response.choices[0].message.content)
+    send_clicked = st.button("Envoyer")
+    if send_clicked and question:
+        prompt = (
+            PROMPT_PEDAGOGIQUE
+            + "\n\nDOCUMENT:\n"
+            + st.session_state.document_content
+            + "\n\nQUESTION:\n"
+            + question
+        )
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        st.markdown("**🤖 Assistant :**")
+        st.write(response.choices[0].message.content)
