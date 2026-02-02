@@ -7,7 +7,8 @@ from PIL import Image
 import io
 import docx
 import fitz  # PyMuPDF
-from pdf2image import convert_from_bytes  # pip install pdf2image
+from pdf2image import convert_from_bytes, convert_from_path
+ # pip install pdf2image
 
 # ======================
 # CONFIG
@@ -205,3 +206,4 @@ Maximum 100 mots.
 
             st.markdown("**🤖 Assistant :**")
             st.write(response.choices[0].message.content)
+
