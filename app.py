@@ -25,10 +25,10 @@ Voici le document de l'élève :
 
 USERS_FILE = "users.json"
 ACTIVE_USERS_FILE = "active_users.json"
-SESSION_TIMEOUT = 3600  # 1 heure
+SESSION_TIMEOUT = 1 * 60  # 1 minutes
 
 # ======================
-# UTILITAIRES
+# FONCTIONS UTILITAIRES
 # ======================
 def load_users():
     with open(USERS_FILE, "r") as f:
@@ -45,21 +45,12 @@ def save_active_users(data):
         json.dump(data, f)
 
 def clean_expired_sessions():
+    """Supprime les sessions expirées depuis plus de SESSION_TIMEOUT secondes"""
     active_users = load_active_users()
     now = time.time()
     updated = {u: t for u, t in active_users.items() if now - t < SESSION_TIMEOUT}
     save_active_users(updated)
-
-def logout_user():
-    """Libère le compte actif de l'élève."""
-    active_users = load_active_users()
-    if st.session_state.username in active_users:
-        del active_users[st.session_state.username]
-        save_active_users(active_users)
-    st.session_state.connected = False
-    st.session_state.username = None
-    st.session_state.document_content = ""
-    st.session_state.document_images = []
+    return updated
 
 # ======================
 # SESSION
@@ -70,12 +61,13 @@ if "username" not in st.session_state:
     st.session_state.username = None
 if "document_content" not in st.session_state:
     st.session_state.document_content = ""
-if "document_images" not in st.session_state:
-    st.session_state.document_images = []
+if "document_image" not in st.session_state:
+    st.session_state.document_image = None
 
-clean_expired_sessions()
+# Nettoyage des sessions expirées
+active_users = clean_expired_sessions()
+
 USERS = load_users()
-active_users = load_active_users()
 
 # ======================
 # LOGIN
@@ -88,6 +80,8 @@ if not st.session_state.connected:
 
     if st.button("Connexion"):
         if username in USERS and USERS[username] == password:
+            # Vérifie si l'utilisateur est déjà connecté
+            active_users = clean_expired_sessions()
             if username in active_users:
                 st.error("❌ Ce compte est déjà connecté ailleurs.")
             else:
@@ -101,24 +95,25 @@ if not st.session_state.connected:
     st.stop()
 
 # ======================
-# DECONNEXION AUTOMATIQUE SUR FERMETURE
-# ======================
-# Streamlit n'a pas de vrai "on_close", mais on peut utiliser on_session_end
-if "on_session_end" not in st.session_state:
-    st.session_state.on_session_end = logout_user
-
-# ======================
 # INTERFACE
 # ======================
 st.title("🧠 Assistant pédagogique IA")
 
 # Déconnexion manuelle
 if st.button("🚪 Déconnexion"):
-    logout_user()
-    st.experimental_set_query_params()
+    active_users = load_active_users()
+    if st.session_state.username in active_users:
+        del active_users[st.session_state.username]
+        save_active_users(active_users)
+
+    st.session_state.connected = False
+    st.session_state.username = None
+    st.session_state.document_content = ""
+    st.session_state.document_image = None
+    st.experimental_rerun = None  # On retire l'ancien rerun
     st.stop()
 
-col_doc, col_chat = st.columns([1, 2])  # document plus étroit que le chat
+col_doc, col_chat = st.columns([1,1])
 
 # ======================
 # DOCUMENT
@@ -128,9 +123,6 @@ with col_doc:
     uploaded_file = st.file_uploader("Dépose ton document", type=["txt", "docx", "pdf"])
 
     if uploaded_file:
-        st.session_state.document_images = []
-        content = ""
-
         # TXT
         if uploaded_file.name.endswith(".txt"):
             content = uploaded_file.read().decode("utf-8")
@@ -143,37 +135,38 @@ with col_doc:
             content = "\n".join([p.text for p in doc.paragraphs])
             st.session_state.document_content = content
 
+            # Images du DOCX
             images = []
             for rel in doc.part._rels:
                 rel_obj = doc.part._rels[rel]
                 if "image" in rel_obj.target_ref:
                     image_data = rel_obj.target_part.blob
-                    img = Image.open(io.BytesIO(image_data))
-                    img.thumbnail((600, 800))
-                    images.append(img)
+                    image = Image.open(io.BytesIO(image_data))
+                    image.thumbnail((600, 800))
+                    images.append(image)
             if images:
-                st.session_state.document_images = images
-                st.image(images, use_column_width=True)
+                st.session_state.document_image = images[0]
+                st.image(st.session_state.document_image)
 
         # PDF
         elif uploaded_file.name.endswith(".pdf"):
             pdf_bytes = uploaded_file.read()
             pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
             content = ""
-            images = []
             for page in pdf_doc:
                 content += page.get_text()
-                pix = page.get_pixmap()
-                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                img.thumbnail((600, 800))
-                images.append(img)
             st.session_state.document_content = content
-            st.session_state.document_images = images
-            if images:
-                st.image(images, use_column_width=True)
+
+            # Affichage de la première page comme image
+            page = pdf_doc.load_page(0)
+            pix = page.get_pixmap()
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            img.thumbnail((600, 800))
+            st.session_state.document_image = img
+            st.image(st.session_state.document_image)
 
 # ======================
-# RAPPEL DE COURS
+# CHAT ET RAPPEL DE COURS
 # ======================
 with col_chat:
     st.subheader("📝 Rappel de cours")
@@ -193,10 +186,6 @@ Maximum 100 mots.
             st.markdown("**📚 Rappel de cours :**")
             st.write(response.choices[0].message.content)
 
-# ======================
-# CHAT
-# ======================
-with col_chat:
     st.subheader("💬 Chat pédagogique")
     question = st.text_area("Ta question")
 
@@ -209,9 +198,11 @@ with col_chat:
                 + "\n\nQUESTION:\n"
                 + question
             )
+
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}]
             )
+
             st.markdown("**🤖 Assistant :**")
             st.write(response.choices[0].message.content)
