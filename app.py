@@ -7,7 +7,7 @@ from openai import OpenAI
 from PIL import Image
 import docx
 import fitz  # PyMuPDF
-from pdf2image import convert_from_bytes
+from pdf2image import convert_from_bytes  # import correct
 
 # ======================
 # CONFIG
@@ -29,7 +29,7 @@ ACTIVE_USERS_FILE = "active_users.json"
 SESSION_TIMEOUT = 3600  # 1 heure
 
 # ======================
-# FONCTIONS UTILITAIRES
+# UTILITAIRES
 # ======================
 def load_users():
     with open(USERS_FILE, "r") as f:
@@ -60,11 +60,10 @@ if "username" not in st.session_state:
     st.session_state.username = None
 if "document_content" not in st.session_state:
     st.session_state.document_content = ""
-if "document_image" not in st.session_state:
-    st.session_state.document_image = None
+if "document_images" not in st.session_state:
+    st.session_state.document_images = []
 
 clean_expired_sessions()
-
 USERS = load_users()
 active_users = load_active_users()
 
@@ -73,7 +72,6 @@ active_users = load_active_users()
 # ======================
 if not st.session_state.connected:
     st.title("🔐 Connexion élève")
-
     username = st.text_input("Identifiant")
     password = st.text_input("Mot de passe", type="password")
 
@@ -90,15 +88,12 @@ if not st.session_state.connected:
                 st.experimental_rerun()
         else:
             st.error("Identifiant ou mot de passe incorrect")
-
     st.stop()
 
 # ======================
-# AUTO-DECONNEXION
+# DECONNEXION AUTOMATIQUE
 # ======================
-import atexit
-
-def auto_logout():
+def logout_user():
     if st.session_state.connected and st.session_state.username:
         active_users = load_active_users()
         if st.session_state.username in active_users:
@@ -107,18 +102,17 @@ def auto_logout():
         st.session_state.connected = False
         st.session_state.username = None
 
-atexit.register(auto_logout)
-
 # ======================
 # INTERFACE
 # ======================
 st.title("🧠 Assistant pédagogique IA")
 
 if st.button("🚪 Déconnexion"):
-    auto_logout()
+    logout_user()
     st.experimental_rerun()
 
-col1, col2 = st.columns([1,1.2])  # colonnes un peu redimensionnées
+# colonnes : document à gauche, chat + rappel à droite
+col1, col2 = st.columns([1, 1.3])
 
 # ======================
 # DOCUMENT
@@ -128,8 +122,8 @@ with col1:
     uploaded_file = st.file_uploader("Dépose ton document", type=["txt", "docx", "pdf"])
 
     if uploaded_file:
+        st.session_state.document_images = []  # réinitialiser
         content = ""
-        image_preview = None
 
         # TXT
         if uploaded_file.name.endswith(".txt"):
@@ -140,24 +134,20 @@ with col1:
         elif uploaded_file.name.endswith(".docx"):
             doc = docx.Document(uploaded_file)
             content = "\n".join([p.text for p in doc.paragraphs])
-            # Convertir docx en image simple : capture page par page
-            images = []
+            # Images dans DOCX
             for rel in doc.part._rels:
                 rel_obj = doc.part._rels[rel]
                 if "image" in rel_obj.target_ref:
                     img_data = rel_obj.target_part.blob
                     img = Image.open(io.BytesIO(img_data))
                     img.thumbnail((600, 800))
-                    images.append(img)
-            if images:
-                st.image(images, caption="Document (images)", use_column_width=True)
+                    st.image(img, caption="Document (image)", use_column_width=True)
 
         # PDF
         elif uploaded_file.name.endswith(".pdf"):
             pdf = fitz.open(stream=uploaded_file.read(), filetype="pdf")
             for page in pdf:
                 content += page.get_text()
-            # Convertir PDF en images pour affichage
             uploaded_file.seek(0)
             pages = convert_from_bytes(uploaded_file.read(), dpi=150)
             st.image(pages, caption="Document (images)", use_column_width=True)
@@ -194,18 +184,10 @@ with col2:
 
     if st.button("Envoyer"):
         if question:
-            prompt = (
-                PROMPT_PEDAGOGIQUE
-                + "\n\nDOCUMENT:\n"
-                + st.session_state.document_content
-                + "\n\nQUESTION:\n"
-                + question
-            )
-
+            prompt = PROMPT_PEDAGOGIQUE + "\n\nDOCUMENT:\n" + st.session_state.document_content + "\n\nQUESTION:\n" + question
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}]
             )
-
             st.markdown("**🤖 Assistant :**")
             st.write(response.choices[0].message.content)
