@@ -44,7 +44,6 @@ def save_active_users(data):
         json.dump(data, f)
 
 def clean_expired_sessions():
-    """Supprime les sessions expirées depuis plus de SESSION_TIMEOUT secondes"""
     active_users = load_active_users()
     now = time.time()
     updated = {u: t for u, t in active_users.items() if now - t < SESSION_TIMEOUT}
@@ -52,7 +51,6 @@ def clean_expired_sessions():
     return updated
 
 def text_to_image(text, width=600, font_size=16):
-    """Convertit un texte en image"""
     font = ImageFont.load_default()
     lines = text.split('\n')
     dummy_img = Image.new("RGB", (width, 1000))
@@ -78,6 +76,10 @@ if "document_content" not in st.session_state:
     st.session_state.document_content = ""
 if "document_images" not in st.session_state:
     st.session_state.document_images = []
+if "last_question" not in st.session_state:
+    st.session_state.last_question = ""
+if "last_answer" not in st.session_state:
+    st.session_state.last_answer = ""
 
 USERS = load_users()
 active_users = clean_expired_sessions()
@@ -91,12 +93,11 @@ if not st.session_state.connected:
     password = st.text_input("Mot de passe", type="password")
 
     if st.button("Connexion"):
-        active_users = clean_expired_sessions()  # on nettoie les sessions expirées
+        active_users = clean_expired_sessions()
         if username in USERS and USERS[username] == password:
             if username in active_users:
                 st.error("❌ Ce compte est déjà connecté sur un autre appareil.")
             else:
-                # ✅ Bloque la connexion simultanée en écrivant immédiatement
                 active_users = load_active_users()
                 if username in active_users:
                     st.error("❌ Ce compte est déjà connecté sur un autre appareil.")
@@ -115,7 +116,6 @@ if not st.session_state.connected:
 # ======================
 st.title("🧠 Assistant pédagogique IA")
 
-# Déconnexion
 if st.button("🚪 Déconnexion"):
     active_users = load_active_users()
     if st.session_state.username in active_users:
@@ -125,7 +125,6 @@ if st.button("🚪 Déconnexion"):
     st.session_state.username = None
     st.session_state.document_content = ""
     st.session_state.document_images = []
-    st.experimental_set_query_params()
     st.stop()
 
 col_doc, col_chat = st.columns([1, 2])
@@ -141,7 +140,6 @@ with col_doc:
         st.session_state.document_images = []
         content = ""
 
-        # TXT
         if uploaded_file.name.endswith(".txt"):
             content = uploaded_file.read().decode("utf-8")
             st.session_state.document_content = content
@@ -149,7 +147,6 @@ with col_doc:
             st.session_state.document_images = [img]
             st.image(img, use_column_width=True)
 
-        # DOCX
         elif uploaded_file.name.endswith(".docx"):
             doc = docx.Document(uploaded_file)
             content = "\n".join([p.text for p in doc.paragraphs])
@@ -165,7 +162,6 @@ with col_doc:
             st.session_state.document_images = images
             st.image(images, use_column_width=True)
 
-        # PDF
         elif uploaded_file.name.endswith(".pdf"):
             pdf_bytes = uploaded_file.read()
             pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
@@ -182,35 +178,17 @@ with col_doc:
             st.image(images, use_column_width=True)
 
 # ======================
-# RAPPEL DE COURS
-# ======================
-with col_chat:
-    st.subheader("📝 Rappel de cours")
-    mots_cles = st.text_input("Mots-clés")
-
-    if st.button("Obtenir le rappel"):
-        if mots_cles:
-            prompt_rappel = f"""
-Tu es un assistant pédagogique bienveillant.
-Fais un rappel de cours clair basé sur ces mots-clés : {mots_cles}
-Maximum 100 mots.
-"""
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt_rappel}]
-            )
-            st.markdown("**📚 Rappel de cours :**")
-            st.write(response.choices[0].message.content)
-
-# ======================
 # CHAT
 # ======================
 with col_chat:
     st.subheader("💬 Chat pédagogique")
-    question = st.text_area("Ta question")
+
+    question = st.text_area("Ta question", key="question_input")
 
     if st.button("Envoyer"):
         if question:
+            st.session_state.last_question = question
+
             prompt = (
                 PROMPT_PEDAGOGIQUE
                 + "\n\nDOCUMENT:\n"
@@ -218,9 +196,21 @@ with col_chat:
                 + "\n\nQUESTION:\n"
                 + question
             )
+
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}]
             )
-            st.markdown("**🤖 Assistant :**")
-            st.write(response.choices[0].message.content)
+
+            st.session_state.last_answer = response.choices[0].message.content
+
+            # vider le champ texte
+            st.session_state.question_input = ""
+
+    if st.session_state.last_question:
+        st.markdown("**❓ Question :**")
+        st.write(st.session_state.last_question)
+
+    if st.session_state.last_answer:
+        st.markdown("**🤖 Assistant :**")
+        st.write(st.session_state.last_answer)
