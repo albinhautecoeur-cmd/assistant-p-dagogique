@@ -24,7 +24,7 @@ Voici le document de l'élève :
 
 USERS_FILE = "users.json"
 ACTIVE_USERS_FILE = "active_users.json"
-SESSION_TIMEOUT = 60  # 1 minute
+SESSION_TIMEOUT = 60  # secondes
 
 # ======================
 # UTILITAIRES
@@ -50,14 +50,14 @@ def clean_expired_sessions():
     save_active_users(updated)
     return updated
 
-def text_to_image(text, width=600, font_size=16):
+def text_to_image(text, width=600):
     font = ImageFont.load_default()
-    lines = text.split('\n')
+    lines = text.split("\n")
     dummy_img = Image.new("RGB", (width, 1000))
     draw = ImageDraw.Draw(dummy_img)
     line_height = draw.textbbox((0,0), "Hg", font=font)[3] + 4
     height = line_height * len(lines) + 20
-    img = Image.new("RGB", (width, height), color="white")
+    img = Image.new("RGB", (width, height), "white")
     draw = ImageDraw.Draw(img)
     y = 10
     for line in lines:
@@ -89,24 +89,22 @@ active_users = clean_expired_sessions()
 # ======================
 if not st.session_state.connected:
     st.title("🔐 Connexion élève")
+
     username = st.text_input("Identifiant")
     password = st.text_input("Mot de passe", type="password")
 
     if st.button("Connexion"):
         active_users = clean_expired_sessions()
         if username in USERS and USERS[username] == password:
+            active_users = load_active_users()
             if username in active_users:
                 st.error("❌ Ce compte est déjà connecté sur un autre appareil.")
             else:
-                active_users = load_active_users()
-                if username in active_users:
-                    st.error("❌ Ce compte est déjà connecté sur un autre appareil.")
-                else:
-                    active_users[username] = time.time()
-                    save_active_users(active_users)
-                    st.session_state.connected = True
-                    st.session_state.username = username
-                    st.success("Connexion réussie")
+                active_users[username] = time.time()
+                save_active_users(active_users)
+                st.session_state.connected = True
+                st.session_state.username = username
+                st.success("Connexion réussie")
         else:
             st.error("Identifiant ou mot de passe incorrect")
     st.stop()
@@ -125,6 +123,7 @@ if st.button("🚪 Déconnexion"):
     st.session_state.username = None
     st.session_state.document_content = ""
     st.session_state.document_images = []
+    st.experimental_set_query_params()
     st.stop()
 
 col_doc, col_chat = st.columns([1, 2])
@@ -137,20 +136,16 @@ with col_doc:
     uploaded_file = st.file_uploader("Dépose ton document", type=["txt", "docx", "pdf"])
 
     if uploaded_file:
-        st.session_state.document_images = []
         content = ""
+        images = []
 
         if uploaded_file.name.endswith(".txt"):
             content = uploaded_file.read().decode("utf-8")
-            st.session_state.document_content = content
-            img = text_to_image(content)
-            st.session_state.document_images = [img]
-            st.image(img, use_column_width=True)
+            images = [text_to_image(content)]
 
         elif uploaded_file.name.endswith(".docx"):
             doc = docx.Document(uploaded_file)
             content = "\n".join([p.text for p in doc.paragraphs])
-            st.session_state.document_content = content
             images = [text_to_image(content)]
             for rel in doc.part._rels:
                 rel_obj = doc.part._rels[rel]
@@ -159,23 +154,41 @@ with col_doc:
                     img = Image.open(io.BytesIO(image_data))
                     img.thumbnail((600, 800))
                     images.append(img)
-            st.session_state.document_images = images
-            st.image(images, use_column_width=True)
 
         elif uploaded_file.name.endswith(".pdf"):
             pdf_bytes = uploaded_file.read()
             pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-            content = ""
-            images = []
             for page in pdf_doc:
                 content += page.get_text()
                 pix = page.get_pixmap()
                 img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
                 img.thumbnail((600, 800))
                 images.append(img)
-            st.session_state.document_content = content
-            st.session_state.document_images = images
-            st.image(images, use_column_width=True)
+
+        st.session_state.document_content = content
+        st.session_state.document_images = images
+        st.image(images, use_column_width=True)
+
+# ======================
+# RAPPEL DE COURS
+# ======================
+with col_chat:
+    st.subheader("📝 Rappel de cours")
+    mots_cles = st.text_input("Mots-clés")
+
+    if st.button("Obtenir le rappel"):
+        if mots_cles:
+            prompt_rappel = f"""
+Tu es un assistant pédagogique bienveillant.
+Fais un rappel de cours clair basé sur ces mots-clés : {mots_cles}
+Maximum 100 mots.
+"""
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt_rappel}]
+            )
+            st.markdown("**📚 Rappel de cours :**")
+            st.write(response.choices[0].message.content)
 
 # ======================
 # CHAT
@@ -183,29 +196,28 @@ with col_doc:
 with col_chat:
     st.subheader("💬 Chat pédagogique")
 
-    question = st.text_area("Ta question", key="question_input")
+    with st.form("chat_form"):
+        question = st.text_area("Ta question", key="question_input")
+        submitted = st.form_submit_button("Envoyer")
 
-    if st.button("Envoyer"):
-        if question:
-            st.session_state.last_question = question
+    if submitted and question:
+        st.session_state.last_question = question
 
-            prompt = (
-                PROMPT_PEDAGOGIQUE
-                + "\n\nDOCUMENT:\n"
-                + st.session_state.document_content
-                + "\n\nQUESTION:\n"
-                + question
-            )
+        prompt = (
+            PROMPT_PEDAGOGIQUE
+            + "\n\nDOCUMENT:\n"
+            + st.session_state.document_content
+            + "\n\nQUESTION:\n"
+            + question
+        )
 
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}]
-            )
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}]
+        )
 
-            st.session_state.last_answer = response.choices[0].message.content
-
-            # vider le champ texte
-            st.session_state.question_input = ""
+        st.session_state.last_answer = response.choices[0].message.content
+        st.session_state.question_input = ""
 
     if st.session_state.last_question:
         st.markdown("**❓ Question :**")
