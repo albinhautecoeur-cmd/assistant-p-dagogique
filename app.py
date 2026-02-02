@@ -76,12 +76,10 @@ if "document_content" not in st.session_state:
     st.session_state.document_content = ""
 if "document_images" not in st.session_state:
     st.session_state.document_images = []
-if "last_question" not in st.session_state:
-    st.session_state.last_question = ""
-if "last_answer" not in st.session_state:
-    st.session_state.last_answer = ""
 if "question_input" not in st.session_state:
     st.session_state.question_input = ""
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []  # <-- HISTORIQUE
 
 USERS = load_users()
 active_users = clean_expired_sessions()
@@ -121,10 +119,12 @@ if st.button("🚪 Déconnexion"):
     if st.session_state.username in active_users:
         del active_users[st.session_state.username]
         save_active_users(active_users)
+
     st.session_state.connected = False
     st.session_state.username = None
     st.session_state.document_content = ""
     st.session_state.document_images = []
+    st.session_state.chat_history = []
     st.experimental_set_query_params()
     st.stop()
 
@@ -198,8 +198,6 @@ Maximum 100 mots.
 def submit_question():
     q = st.session_state.question_input
     if q:
-        st.session_state.last_question = q
-
         prompt = (
             PROMPT_PEDAGOGIQUE
             + "\n\nDOCUMENT:\n"
@@ -213,7 +211,10 @@ def submit_question():
             messages=[{"role": "user", "content": prompt}]
         )
 
-        st.session_state.last_answer = response.choices[0].message.content
+        st.session_state.chat_history.append(
+            {"question": q, "answer": response.choices[0].message.content}
+        )
+
         st.session_state.question_input = ""
 
 with col_chat:
@@ -223,10 +224,9 @@ with col_chat:
         st.text_area("Ta question", key="question_input")
         st.form_submit_button("Envoyer", on_click=submit_question)
 
-    if st.session_state.last_question:
+    for msg in st.session_state.chat_history:
         st.markdown("**❓ Question :**")
-        st.write(st.session_state.last_question)
-
-    if st.session_state.last_answer:
+        st.write(msg["question"])
         st.markdown("**🤖 Assistant :**")
-        st.write(st.session_state.last_answer)
+        st.write(msg["answer"])
+        st.markdown("---")
