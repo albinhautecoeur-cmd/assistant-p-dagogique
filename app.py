@@ -60,6 +60,8 @@ if "document_content" not in st.session_state:
     st.session_state.document_content = ""
 if "document_images" not in st.session_state:
     st.session_state.document_images = []
+if "rerun" not in st.session_state:
+    st.session_state.rerun = False  # pour gérer rerun sans planter
 
 clean_expired_sessions()
 USERS = load_users()
@@ -83,10 +85,12 @@ if not st.session_state.connected:
                 save_active_users(active_users)
                 st.session_state.connected = True
                 st.session_state.username = username
-                st.success("Connexion réussie")
-                st.experimental_rerun()
+                st.session_state.rerun = True  # déclenche rerun en dehors du bloc
         else:
             st.error("Identifiant ou mot de passe incorrect")
+    if st.session_state.rerun:
+        st.session_state.rerun = False
+        st.experimental_rerun()
     st.stop()
 
 # ======================
@@ -95,7 +99,8 @@ if not st.session_state.connected:
 st.title("🧠 Assistant pédagogique IA")
 
 # Bouton de déconnexion
-if st.button("🚪 Déconnexion"):
+logout_clicked = st.button("🚪 Déconnexion")
+if logout_clicked:
     active_users = load_active_users()
     if st.session_state.username in active_users:
         del active_users[st.session_state.username]
