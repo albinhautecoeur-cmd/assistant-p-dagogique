@@ -167,4 +167,5 @@ Maximum 100 mots.
                 messages=[{"role": "user", "content": prompt_rappel}]
             )
             st.markdown("**📚 Rappel de cours :**")
-            st.write(response.cho
+            st.write(response.cho)
+
