@@ -3,15 +3,17 @@ import json
 import os
 import time
 from openai import OpenAI
+from PIL import Image
+import io
 import docx
 import fitz  # PyMuPDF
-from pdf2image import convert_from_bytes
-from PIL import Image
+from pdf2image import convert_from_bytes  # pip install pdf2image
 
 # ======================
 # CONFIG
 # ======================
 st.set_page_config(page_title="Assistant pédagogique", layout="wide")
+
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 PROMPT_PEDAGOGIQUE = """
@@ -58,12 +60,11 @@ if "username" not in st.session_state:
     st.session_state.username = None
 if "document_content" not in st.session_state:
     st.session_state.document_content = ""
-if "document_images" not in st.session_state:
-    st.session_state.document_images = []
-if "rerun" not in st.session_state:
-    st.session_state.rerun = False  # pour gérer rerun sans planter
+if "document_image" not in st.session_state:
+    st.session_state.document_image = None
 
 clean_expired_sessions()
+
 USERS = load_users()
 active_users = load_active_users()
 
@@ -72,11 +73,11 @@ active_users = load_active_users()
 # ======================
 if not st.session_state.connected:
     st.title("🔐 Connexion élève")
+
     username = st.text_input("Identifiant")
     password = st.text_input("Mot de passe", type="password")
 
-    login_clicked = st.button("Connexion")
-    if login_clicked:
+    if st.button("Connexion"):
         if username in USERS and USERS[username] == password:
             if username in active_users:
                 st.error("❌ Ce compte est déjà connecté ailleurs.")
@@ -85,12 +86,11 @@ if not st.session_state.connected:
                 save_active_users(active_users)
                 st.session_state.connected = True
                 st.session_state.username = username
-                st.session_state.rerun = True  # déclenche rerun en dehors du bloc
+                st.experimental_set_query_params()  # simple refresh
+                st.success("Connexion réussie")
         else:
             st.error("Identifiant ou mot de passe incorrect")
-    if st.session_state.rerun:
-        st.session_state.rerun = False
-        st.experimental_rerun()
+
     st.stop()
 
 # ======================
@@ -98,91 +98,110 @@ if not st.session_state.connected:
 # ======================
 st.title("🧠 Assistant pédagogique IA")
 
-# Bouton de déconnexion
-logout_clicked = st.button("🚪 Déconnexion")
-if logout_clicked:
+# Bouton déconnexion
+if st.button("🚪 Déconnexion"):
     active_users = load_active_users()
     if st.session_state.username in active_users:
         del active_users[st.session_state.username]
         save_active_users(active_users)
+
     st.session_state.connected = False
     st.session_state.username = None
     st.session_state.document_content = ""
-    st.session_state.document_images = []
-    st.experimental_rerun()
+    st.session_state.document_image = None
+    st.experimental_set_query_params()
+    st.stop()
 
 col_doc, col_chat = st.columns([1,1])
 
-# --------------------
+# ======================
 # DOCUMENT
-# --------------------
+# ======================
 with col_doc:
     st.subheader("📄 Document de travail")
-    uploaded_file = st.file_uploader("Dépose ton document", type=["txt","docx","pdf"])
+    uploaded_file = st.file_uploader("Dépose ton document", type=["txt", "docx", "pdf"])
 
     if uploaded_file:
-        content = ""
-        images = []
-
+        # Pour TXT
         if uploaded_file.name.endswith(".txt"):
             content = uploaded_file.read().decode("utf-8")
+            st.session_state.document_content = content
             st.text_area("Contenu du document", content, height=400)
 
+        # Pour DOCX
         elif uploaded_file.name.endswith(".docx"):
             doc = docx.Document(uploaded_file)
             content = "\n".join([p.text for p in doc.paragraphs])
-            st.text_area("Contenu du document", content, height=400)
+            st.session_state.document_content = content
 
+            # Convertir en image simple pour afficher
+            images = []
+            for rel in doc.part._rels:
+                rel_obj = doc.part._rels[rel]
+                if "image" in rel_obj.target_ref:
+                    image_data = rel_obj.target_part.blob
+                    image = Image.open(io.BytesIO(image_data))
+                    image.thumbnail((600, 800))
+                    images.append(image)
+            if images:
+                st.session_state.document_image = images[0]
+                st.image(st.session_state.document_image)
+
+        # Pour PDF
         elif uploaded_file.name.endswith(".pdf"):
-            pdf = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-            for page in pdf:
+            pdf_bytes = uploaded_file.read()
+            pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            content = ""
+            for page in pdf_doc:
                 content += page.get_text()
-            uploaded_file.seek(0)
-            pages = convert_from_bytes(uploaded_file.read(), dpi=150)
-            for page in pages:
-                images.append(page)
-            for img in images:
-                st.image(img, use_column_width=True)
+            st.session_state.document_content = content
 
-        st.session_state.document_content = content
-        st.session_state.document_images = images
+            # Conversion en images pour affichage
+            pages = convert_from_bytes(pdf_bytes, dpi=150)
+            if pages:
+                page_image = pages[0]
+                page_image.thumbnail((600, 800))
+                st.session_state.document_image = page_image
+                st.image(st.session_state.document_image)
 
-# --------------------
-# CHAT + RAPPEL
-# --------------------
+# ======================
+# CHAT ET RAPPEL DE COURS
+# ======================
 with col_chat:
-    # Rappel de cours
     st.subheader("📝 Rappel de cours")
-    mots_cles = st.text_input("Mots-clés pour rappel")
-    rappel_clicked = st.button("Obtenir le rappel")
-    if rappel_clicked and mots_cles:
-        prompt_rappel = f"""
+    mots_cles = st.text_input("Mots-clés")
+
+    if st.button("Obtenir le rappel"):
+        if mots_cles:
+            prompt_rappel = f"""
 Tu es un assistant pédagogique bienveillant.
 Fais un rappel de cours clair basé sur ces mots-clés : {mots_cles}
 Maximum 100 mots.
 """
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt_rappel}]
-        )
-        st.markdown("**📚 Rappel de cours :**")
-        st.write(response.choices[0].message.content)
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt_rappel}]
+            )
+            st.markdown("**📚 Rappel de cours :**")
+            st.write(response.choices[0].message.content)
 
-    # Chat
     st.subheader("💬 Chat pédagogique")
     question = st.text_area("Ta question")
-    send_clicked = st.button("Envoyer")
-    if send_clicked and question:
-        prompt = (
-            PROMPT_PEDAGOGIQUE
-            + "\n\nDOCUMENT:\n"
-            + st.session_state.document_content
-            + "\n\nQUESTION:\n"
-            + question
-        )
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}]
-        )
-        st.markdown("**🤖 Assistant :**")
-        st.write(response.choices[0].message.content)
+
+    if st.button("Envoyer"):
+        if question:
+            prompt = (
+                PROMPT_PEDAGOGIQUE
+                + "\n\nDOCUMENT:\n"
+                + st.session_state.document_content
+                + "\n\nQUESTION:\n"
+                + question
+            )
+
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}]
+            )
+
+            st.markdown("**🤖 Assistant :**")
+            st.write(response.choices[0].message.content)
