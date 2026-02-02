@@ -50,6 +50,17 @@ def clean_expired_sessions():
     updated = {u: t for u, t in active_users.items() if now - t < SESSION_TIMEOUT}
     save_active_users(updated)
 
+def logout_user():
+    """Libère le compte actif de l'élève."""
+    active_users = load_active_users()
+    if st.session_state.username in active_users:
+        del active_users[st.session_state.username]
+        save_active_users(active_users)
+    st.session_state.connected = False
+    st.session_state.username = None
+    st.session_state.document_content = ""
+    st.session_state.document_images = []
+
 # ======================
 # SESSION
 # ======================
@@ -90,21 +101,21 @@ if not st.session_state.connected:
     st.stop()
 
 # ======================
+# DECONNEXION AUTOMATIQUE SUR FERMETURE
+# ======================
+# Streamlit n'a pas de vrai "on_close", mais on peut utiliser on_session_end
+if "on_session_end" not in st.session_state:
+    st.session_state.on_session_end = logout_user
+
+# ======================
 # INTERFACE
 # ======================
 st.title("🧠 Assistant pédagogique IA")
 
-# Déconnexion
+# Déconnexion manuelle
 if st.button("🚪 Déconnexion"):
-    active_users = load_active_users()
-    if st.session_state.username in active_users:
-        del active_users[st.session_state.username]
-        save_active_users(active_users)
-    st.session_state.connected = False
-    st.session_state.username = None
-    st.session_state.document_content = ""
-    st.session_state.document_images = []
-    st.experimental_set_query_params()  # simple refresh sans rerun
+    logout_user()
+    st.experimental_set_query_params()
     st.stop()
 
 col_doc, col_chat = st.columns([1, 2])  # document plus étroit que le chat
@@ -204,4 +215,3 @@ with col_chat:
             )
             st.markdown("**🤖 Assistant :**")
             st.write(response.choices[0].message.content)
-
