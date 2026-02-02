@@ -84,7 +84,7 @@ if not st.session_state.connected:
                 save_active_users(active_users)
                 st.session_state.connected = True
                 st.session_state.username = username
-                st.experimental_rerun()
+                st.success("Connexion réussie")
         else:
             st.error("Identifiant ou mot de passe incorrect")
     st.stop()
@@ -104,7 +104,8 @@ if st.button("🚪 Déconnexion"):
     st.session_state.username = None
     st.session_state.document_content = ""
     st.session_state.document_images = []
-    st.experimental_rerun()
+    st.experimental_set_query_params()  # simple refresh sans rerun
+    st.stop()
 
 col_doc, col_chat = st.columns([1, 2])  # document plus étroit que le chat
 
@@ -203,3 +204,4 @@ with col_chat:
             )
             st.markdown("**🤖 Assistant :**")
             st.write(response.choices[0].message.content)
+
