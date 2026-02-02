@@ -7,7 +7,6 @@ from PIL import Image
 import io
 import docx
 import fitz  # PyMuPDF
-from pdf2image import convert_from_bytes  # pip install pdf2image
 
 # ======================
 # CONFIG
@@ -29,7 +28,7 @@ ACTIVE_USERS_FILE = "active_users.json"
 SESSION_TIMEOUT = 3600  # 1 heure
 
 # ======================
-# FONCTIONS UTILITAIRES
+# UTILITAIRES
 # ======================
 def load_users():
     with open(USERS_FILE, "r") as f:
@@ -60,11 +59,10 @@ if "username" not in st.session_state:
     st.session_state.username = None
 if "document_content" not in st.session_state:
     st.session_state.document_content = ""
-if "document_image" not in st.session_state:
-    st.session_state.document_image = None
+if "document_images" not in st.session_state:
+    st.session_state.document_images = []
 
 clean_expired_sessions()
-
 USERS = load_users()
 active_users = load_active_users()
 
@@ -86,11 +84,9 @@ if not st.session_state.connected:
                 save_active_users(active_users)
                 st.session_state.connected = True
                 st.session_state.username = username
-                st.experimental_set_query_params()  # simple refresh
-                st.success("Connexion réussie")
+                st.experimental_rerun()
         else:
             st.error("Identifiant ou mot de passe incorrect")
-
     st.stop()
 
 # ======================
@@ -98,21 +94,19 @@ if not st.session_state.connected:
 # ======================
 st.title("🧠 Assistant pédagogique IA")
 
-# Bouton déconnexion
+# Déconnexion
 if st.button("🚪 Déconnexion"):
     active_users = load_active_users()
     if st.session_state.username in active_users:
         del active_users[st.session_state.username]
         save_active_users(active_users)
-
     st.session_state.connected = False
     st.session_state.username = None
     st.session_state.document_content = ""
-    st.session_state.document_image = None
-    st.experimental_set_query_params()
-    st.stop()
+    st.session_state.document_images = []
+    st.experimental_rerun()
 
-col_doc, col_chat = st.columns([1,1])
+col_doc, col_chat = st.columns([1, 2])  # document plus étroit que le chat
 
 # ======================
 # DOCUMENT
@@ -122,50 +116,52 @@ with col_doc:
     uploaded_file = st.file_uploader("Dépose ton document", type=["txt", "docx", "pdf"])
 
     if uploaded_file:
-        # Pour TXT
+        st.session_state.document_images = []
+        content = ""
+
+        # TXT
         if uploaded_file.name.endswith(".txt"):
             content = uploaded_file.read().decode("utf-8")
             st.session_state.document_content = content
             st.text_area("Contenu du document", content, height=400)
 
-        # Pour DOCX
+        # DOCX
         elif uploaded_file.name.endswith(".docx"):
             doc = docx.Document(uploaded_file)
             content = "\n".join([p.text for p in doc.paragraphs])
             st.session_state.document_content = content
 
-            # Convertir en image simple pour afficher
             images = []
             for rel in doc.part._rels:
                 rel_obj = doc.part._rels[rel]
                 if "image" in rel_obj.target_ref:
                     image_data = rel_obj.target_part.blob
-                    image = Image.open(io.BytesIO(image_data))
-                    image.thumbnail((600, 800))
-                    images.append(image)
+                    img = Image.open(io.BytesIO(image_data))
+                    img.thumbnail((600, 800))
+                    images.append(img)
             if images:
-                st.session_state.document_image = images[0]
-                st.image(st.session_state.document_image)
+                st.session_state.document_images = images
+                st.image(images, use_column_width=True)
 
-        # Pour PDF
+        # PDF
         elif uploaded_file.name.endswith(".pdf"):
             pdf_bytes = uploaded_file.read()
             pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
             content = ""
+            images = []
             for page in pdf_doc:
                 content += page.get_text()
+                pix = page.get_pixmap()
+                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                img.thumbnail((600, 800))
+                images.append(img)
             st.session_state.document_content = content
-
-            # Conversion en images pour affichage
-            pages = convert_from_bytes(pdf_bytes, dpi=150)
-            if pages:
-                page_image = pages[0]
-                page_image.thumbnail((600, 800))
-                st.session_state.document_image = page_image
-                st.image(st.session_state.document_image)
+            st.session_state.document_images = images
+            if images:
+                st.image(images, use_column_width=True)
 
 # ======================
-# CHAT ET RAPPEL DE COURS
+# RAPPEL DE COURS
 # ======================
 with col_chat:
     st.subheader("📝 Rappel de cours")
@@ -185,6 +181,10 @@ Maximum 100 mots.
             st.markdown("**📚 Rappel de cours :**")
             st.write(response.choices[0].message.content)
 
+# ======================
+# CHAT
+# ======================
+with col_chat:
     st.subheader("💬 Chat pédagogique")
     question = st.text_area("Ta question")
 
@@ -197,11 +197,9 @@ Maximum 100 mots.
                 + "\n\nQUESTION:\n"
                 + question
             )
-
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}]
             )
-
             st.markdown("**🤖 Assistant :**")
             st.write(response.choices[0].message.content)
