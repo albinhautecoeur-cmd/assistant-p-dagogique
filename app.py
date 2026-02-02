@@ -45,21 +45,21 @@ if "connected" not in st.session_state:
 # ======================
 # LOGIN
 # ======================
-if not st.session_state.connected:
-    st.title("🔐 Connexion élève")
+active_users = load_active_users()
 
-    username = st.text_input("Identifiant")
-    password = st.text_input("Mot de passe", type="password")
-
-    if st.button("Connexion"):
-        if username in USERS and USERS[username] == password:
+if st.button("Connexion"):
+    if username in USERS and USERS[username] == password:
+        if username in active_users:
+            st.error("Ce compte est déjà connecté ailleurs.")
+        else:
+            active_users[username] = time.time()
+            save_active_users(active_users)
             st.session_state.connected = True
+            st.session_state.username = username
             st.success("Connexion réussie")
             st.rerun()
-        else:
-            st.error("Identifiant ou mot de passe incorrect")
-
-    st.stop()
+    else:
+        st.error("Identifiant ou mot de passe incorrect")
 
 # ======================
 # INTERFACE
@@ -126,4 +126,5 @@ Maximum 100 mots.
 
         st.markdown("**🤖 Assistant :**")
         st.write(response.choices[0].message.content)
+
 
