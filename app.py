@@ -176,7 +176,7 @@ with col_doc:
 # ======================
 with col_chat:
     st.subheader("📝 Rappel de cours")
-    mots_cles = st.text_input("Mots-clés")
+    mots_cles = st.text_input("Ne mets ici que des Mots-clés, c'est suffisant")
 
     if st.button("Obtenir le rappel"):
         if mots_cles:
@@ -231,4 +231,5 @@ with col_chat:
         st.markdown("**🤖 Assistant :**")
         st.write(msg["answer"])
         st.markdown("---")
+
 
