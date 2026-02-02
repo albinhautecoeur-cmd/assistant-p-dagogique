@@ -3,12 +3,11 @@ import json
 import os
 import time
 from openai import OpenAI
-from PIL import Image
-import io
 import docx
 import fitz  # PyMuPDF
-from pdf2image import convert_from_bytes, convert_from_path
- # pip install pdf2image
+from PIL import Image
+from io import BytesIO
+from pdf2image import convert_from_bytes
 
 # ======================
 # CONFIG
@@ -91,7 +90,6 @@ if not st.session_state.connected:
                 st.rerun()
         else:
             st.error("Identifiant ou mot de passe incorrect")
-
     st.stop()
 
 # ======================
@@ -104,72 +102,58 @@ if st.button("🚪 Déconnexion"):
     if st.session_state.username in active_users:
         del active_users[st.session_state.username]
         save_active_users(active_users)
-
     st.session_state.connected = False
     st.session_state.username = None
     st.rerun()
 
-# Colonnes : gauche pour document, droite pour chat + rappel
-col_doc, col_chat = st.columns([1, 2])  # proportion 1:2
+# ======================
+# COLONNES DOCUMENT / CHAT
+# ======================
+col_doc, col_chat = st.columns([1, 1.5])  # document plus petit que chat
 
 # ======================
-# DOCUMENT (gauche)
+# DOCUMENT
 # ======================
 with col_doc:
-    st.subheader("📄 Document de travail")
+    st.subheader("📄 Document")
     uploaded_file = st.file_uploader("Dépose ton document", type=["txt", "docx", "pdf"])
 
     if uploaded_file:
-        content = ""
-        images = []
+        st.session_state.document_images = []  # réinitialiser
+        content_text = ""
 
-        # ---------- TXT ----------
         if uploaded_file.name.endswith(".txt"):
-            content = uploaded_file.read().decode("utf-8")
-            # convertir texte en image simple pour affichage
-            img = Image.new("RGB", (600, 800), color="white")
-            from PIL import ImageDraw
-            draw = ImageDraw.Draw(img)
-            draw.text((10, 10), content[:5000], fill="black")  # afficher seulement les 5000 premiers caractères
-            images.append(img)
+            content_text = uploaded_file.read().decode("utf-8")
+            st.text_area("Contenu du document (pour IA)", content_text, height=400)
+            st.session_state.document_images = []  # pas d'image pour txt
 
-        # ---------- DOCX ----------
         elif uploaded_file.name.endswith(".docx"):
             doc = docx.Document(uploaded_file)
-            content = "\n".join([p.text for p in doc.paragraphs])
-            # convertir chaque paragraphe en image
-            img = Image.new("RGB", (600, max(800, 20*len(doc.paragraphs))), color="white")
-            draw = ImageDraw.Draw(img)
-            y = 10
-            for p in doc.paragraphs:
-                draw.text((10, y), p.text, fill="black")
-                y += 20
-            images.append(img)
+            content_text = "\n".join([p.text for p in doc.paragraphs])
+            st.text_area("Contenu du document (pour IA)", content_text, height=400)
+            # Affichage image non dispo pour DOCX simple, peut être amélioré
 
-        # ---------- PDF ----------
         elif uploaded_file.name.endswith(".pdf"):
             pdf_bytes = uploaded_file.read()
+            # Texte pour IA
             pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
             for page in pdf_doc:
-                content += page.get_text()
-            pdf_images = convert_from_bytes(pdf_bytes, dpi=150)
-            images.extend(pdf_images)
+                content_text += page.get_text()
+            st.session_state.document_content = content_text
+            # Conversion PDF -> images pour affichage
+            images = convert_from_bytes(pdf_bytes, dpi=150)
+            for img in images:
+                st.image(img, use_column_width=True)
+                st.session_state.document_images.append(img)
 
-        st.session_state.document_content = content
-        st.session_state.document_images = images
-
-        # Affichage des images
-        st.subheader("📄 Aperçu du document")
-        for img in images:
-            st.image(img, use_column_width=True)
+        st.session_state.document_content = content_text
 
 # ======================
-# CHAT + RAPPEL DE COURS (droite)
+# CHAT ET RAPPEL
 # ======================
 with col_chat:
-    # 🔹 Rappel de cours
     st.subheader("📝 Rappel de cours")
-    mots_cles = st.text_input("Mots-clés")
+    mots_cles = st.text_input("Mots-clés pour rappel")
 
     if st.button("Obtenir le rappel"):
         if mots_cles:
@@ -183,27 +167,4 @@ Maximum 100 mots.
                 messages=[{"role": "user", "content": prompt_rappel}]
             )
             st.markdown("**📚 Rappel de cours :**")
-            st.write(response.choices[0].message.content)
-
-    # 🔹 Chat pédagogique
-    st.subheader("💬 Chat pédagogique")
-    question = st.text_area("Ta question")
-
-    if st.button("Envoyer"):
-        if question:
-            prompt = (
-                PROMPT_PEDAGOGIQUE
-                + "\n\nDOCUMENT:\n"
-                + st.session_state.document_content
-                + "\n\nQUESTION:\n"
-                + question
-            )
-
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}]
-            )
-
-            st.markdown("**🤖 Assistant :**")
-            st.write(response.choices[0].message.content)
-
+            st.write(response.cho
