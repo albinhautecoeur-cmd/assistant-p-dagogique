@@ -131,6 +131,31 @@ with col1:
             st.info("PDF chargé (contenu transmis à l’IA, non affiché)")
 
         st.session_state.document_content = content
+        if uploaded_file:
+    content = ""
+
+    if uploaded_file.name.endswith(".txt"):
+        content = uploaded_file.read().decode("utf-8")
+    elif uploaded_file.name.endswith(".docx"):
+        doc = docx.Document(uploaded_file)
+        content = "\n".join([p.text for p in doc.paragraphs])
+    elif uploaded_file.name.endswith(".pdf"):
+        pdf = fitz.open(stream=uploaded_file.read(), filetype="pdf")
+        for page in pdf:
+            content += page.get_text()
+
+    st.session_state.document_content = content
+
+    # ---------------------
+    # Afficher le document à côté du chat
+    # ---------------------
+    with col2:  # colonne chat
+        st.subheader("📄 Document en consultation")
+        if uploaded_file.name.endswith(".pdf"):
+            st.info("PDF chargé (texte extrait pour l’IA)")
+        else:
+            st.text_area("Document :", content, height=400)
+
 
 # ======================
 # RAPPEL DE COURS
@@ -177,4 +202,5 @@ with col2:
 
             st.markdown("**🤖 Assistant :**")
             st.write(response.choices[0].message.content)
+
 
