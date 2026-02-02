@@ -3,7 +3,7 @@ import json
 import os
 import time
 from openai import OpenAI
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 import io
 import docx
 import fitz  # PyMuPDF
@@ -51,6 +51,21 @@ def clean_expired_sessions():
     updated = {u: t for u, t in active_users.items() if now - t < SESSION_TIMEOUT}
     save_active_users(updated)
     return updated
+
+def text_to_image(text, width=600, font_size=16):
+    """Convertit un texte en image pour affichage"""
+    lines = text.split('\n')
+    font = ImageFont.load_default()
+    # Estimation hauteur
+    line_height = font.getsize('hg')[1] + 4
+    height = line_height * len(lines) + 20
+    img = Image.new("RGB", (width, height), color="white")
+    draw = ImageDraw.Draw(img)
+    y = 10
+    for line in lines:
+        draw.text((10, y), line, fill="black", font=font)
+        y += line_height
+    return img
 
 # ======================
 # SESSION
@@ -127,15 +142,19 @@ with col_doc:
         if uploaded_file.name.endswith(".txt"):
             content = uploaded_file.read().decode("utf-8")
             st.session_state.document_content = content
-            st.text_area("Contenu du document", content, height=400)
+            img = text_to_image(content)
+            st.session_state.document_images = [img]
+            st.image(img, use_column_width=True)
 
         # DOCX
         elif uploaded_file.name.endswith(".docx"):
             doc = docx.Document(uploaded_file)
             content = "\n".join([p.text for p in doc.paragraphs])
             st.session_state.document_content = content
+            img_text = text_to_image(content)
+            images = [img_text]
 
-            images = []
+            # Extraire images intégrées dans Word
             for rel in doc.part._rels:
                 rel_obj = doc.part._rels[rel]
                 if "image" in rel_obj.target_ref:
@@ -143,9 +162,9 @@ with col_doc:
                     img = Image.open(io.BytesIO(image_data))
                     img.thumbnail((600, 800))
                     images.append(img)
-            if images:
-                st.session_state.document_images = images
-                st.image(images, use_column_width=True)
+
+            st.session_state.document_images = images
+            st.image(images, use_column_width=True)
 
         # PDF
         elif uploaded_file.name.endswith(".pdf"):
