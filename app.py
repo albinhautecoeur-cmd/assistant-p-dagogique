@@ -1,3 +1,17 @@
+import time
+
+ACTIVE_USERS_FILE = "active_users.json"
+
+def load_active_users():
+    if not os.path.exists(ACTIVE_USERS_FILE):
+        return {}
+    with open(ACTIVE_USERS_FILE, "r") as f:
+        return json.load(f)
+
+def save_active_users(data):
+    with open(ACTIVE_USERS_FILE, "w") as f:
+        json.dump(data, f)
+
 import streamlit as st
 import json
 import os
@@ -112,3 +126,4 @@ Maximum 100 mots.
 
         st.markdown("**🤖 Assistant :**")
         st.write(response.choices[0].message.content)
+
