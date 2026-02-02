@@ -12,7 +12,6 @@ import fitz  # PyMuPDF
 # CONFIG
 # ======================
 st.set_page_config(page_title="Assistant pédagogique", layout="wide")
-
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 PROMPT_PEDAGOGIQUE = """
@@ -53,7 +52,7 @@ def clean_expired_sessions():
     return updated
 
 def text_to_image(text, width=600, font_size=16):
-    """Convertit un texte (TXT ou DOCX) en image pour affichage"""
+    """Convertit un texte en image"""
     font = ImageFont.load_default()
     lines = text.split('\n')
     dummy_img = Image.new("RGB", (width, 1000))
@@ -88,24 +87,25 @@ active_users = clean_expired_sessions()
 # ======================
 if not st.session_state.connected:
     st.title("🔐 Connexion élève")
-
     username = st.text_input("Identifiant")
     password = st.text_input("Mot de passe", type="password")
 
     if st.button("Connexion"):
-        # ✅ Vérification en temps réel pour empêcher double connexion
-        active_users = clean_expired_sessions()
+        active_users = clean_expired_sessions()  # on nettoie les sessions expirées
         if username in USERS and USERS[username] == password:
             if username in active_users:
                 st.error("❌ Ce compte est déjà connecté sur un autre appareil.")
             else:
-                # Ajouter le compte aux sessions actives
+                # ✅ Bloque la connexion simultanée en écrivant immédiatement
                 active_users = load_active_users()
-                active_users[username] = time.time()
-                save_active_users(active_users)
-                st.session_state.connected = True
-                st.session_state.username = username
-                st.success("Connexion réussie")
+                if username in active_users:
+                    st.error("❌ Ce compte est déjà connecté sur un autre appareil.")
+                else:
+                    active_users[username] = time.time()
+                    save_active_users(active_users)
+                    st.session_state.connected = True
+                    st.session_state.username = username
+                    st.success("Connexion réussie")
         else:
             st.error("Identifiant ou mot de passe incorrect")
     st.stop()
