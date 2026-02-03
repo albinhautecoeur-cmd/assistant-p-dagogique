@@ -18,7 +18,7 @@ client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 PROMPT_PEDAGOGIQUE = """
 Tu es un assistant pédagogique bienveillant.
 Explique clairement, simplement, avec des exemples si nécessaire.
-Ne dépasse pas 60 mots.
+Ne dépasse pas 60 mots que ce soit pour les rappels ou pour la réponse chat.
 Tu ne donnes jamais la réponse directement, tu guides progressivement l'élève.
 Quand tu écris des formules mathématiques :
 - utilise \( ... \) pour les formules en ligne
@@ -273,3 +273,4 @@ with col_chat:
         st.markdown("**🤖 Assistant :**")
         st.markdown(fix_latex_for_streamlit(msg["answer"]))
         st.markdown("---")
+
