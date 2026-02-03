@@ -72,14 +72,17 @@ def text_to_image(text, width=600):
     return img
 
 # ======================
-# ✅ CORRECTION LATEX STREAMLIT — AMÉLIORÉE
+# ✅ CORRECTION LATEX STREAMLIT (ROBUSTE)
 # ======================
 def fix_latex_for_streamlit(text: str) -> str:
-    # 1. \[ ... \] → $$ ... $$
-    text = re.sub(r"\\\[(.*?)\\\]", r"$$\1$$", text, flags=re.S)
+    # Corriger \text pour KaTeX
+    text = text.replace(r"\text", r"\\text")
 
-    # 2. \( ... \) → $ ... $
+    # Convertir \( ... \) en $ ... $
     text = re.sub(r"\\\((.*?)\\\)", r"$\1$", text, flags=re.S)
+
+    # Convertir \[ ... \] en $$ ... $$
+    text = re.sub(r"\\\[(.*?)\\\]", r"$$\1$$", text, flags=re.S)
 
     lines = text.split("\n")
     fixed_lines = []
@@ -87,13 +90,9 @@ def fix_latex_for_streamlit(text: str) -> str:
     for line in lines:
         stripped = line.strip()
 
-        is_math_line = (
-            "\\" in stripped and
-            any(cmd in stripped for cmd in ["\\frac", "\\sqrt", "\\log", "\\div", "\\times"])
-        )
-
-        if is_math_line and not stripped.startswith("$"):
-            fixed_lines.append(f"$$\n{stripped}\n$$")
+        # Si la ligne contient une fraction → la rendre mathématique
+        if r"\frac" in stripped:
+            fixed_lines.append("$$" + stripped + "$$")
         else:
             fixed_lines.append(line)
 
