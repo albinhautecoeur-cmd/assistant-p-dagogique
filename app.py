@@ -3,17 +3,18 @@ import json
 import os
 import time
 import re
-import tempfile
-import numpy as np
-import soundfile as sf
 from openai import OpenAI
 from PIL import Image, ImageDraw, ImageFont
 import io
 import docx
 import fitz  # PyMuPDF
+import numpy as np
+import tempfile
 
-# WebRTC pour la voix
+# Audio
 from streamlit_webrtc import webrtc_streamer, WebRtcMode
+import av
+import soundfile as sf
 
 # ======================
 # CONFIG
@@ -78,7 +79,7 @@ def text_to_image(text, width=600):
     return img
 
 # ======================
-# ✅ CORRECTION LATEX STREAMLIT
+# CORRECTION LATEX STREAMLIT
 # ======================
 def fix_latex_for_streamlit(text: str) -> str:
     text = re.sub(r"I\s*\n\s*0", r"I_0", text)
@@ -91,11 +92,7 @@ def fix_latex_for_streamlit(text: str) -> str:
     fixed_lines = []
     for line in lines:
         stripped = line.strip()
-        is_math_line = (
-            "\\" in stripped
-            and any(cmd in stripped for cmd in ["\\sqrt", "\\frac", "\\log"])
-            and "=" in stripped
-        )
+        is_math_line = ("\\" in stripped and any(cmd in stripped for cmd in ["\\sqrt","\\frac","\\log"]) and "=" in stripped)
         if is_math_line and not stripped.startswith("$"):
             fixed_lines.append(f"$$\n{stripped}\n$$")
         else:
@@ -215,18 +212,19 @@ with col_chat:
             st.markdown(fix_latex_for_streamlit(response.choices[0].message.content))
 
 # ======================
-# CHAT & VOIX
+# CHAT + RECONNAISSANCE VOCALE
 # ======================
+webrtc_ctx = webrtc_streamer(
+    key="assistant-webrtc",
+    mode=WebRtcMode.SENDRECV,
+    audio_receiver_size=1024,
+    media_stream_constraints={"audio": True, "video": False},
+)
+
 def submit_question():
     q = st.session_state.question_input
     if q:
-        prompt = (
-            PROMPT_PEDAGOGIQUE
-            + "\n\nDOCUMENT:\n"
-            + st.session_state.document_content
-            + "\n\nQUESTION:\n"
-            + q
-        )
+        prompt = PROMPT_PEDAGOGIQUE + "\n\nDOCUMENT:\n" + st.session_state.document_content + "\n\nQUESTION:\n" + q
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}]
@@ -236,36 +234,30 @@ def submit_question():
         )
         st.session_state.question_input = ""
 
+# Transcription audio en texte
+if webrtc_ctx.audio_receiver:
+    frames = webrtc_ctx.audio_receiver.get_frames(timeout=0.1)
+    if frames:
+        audio_arrays = [f.to_ndarray().astype(np.float32)/32768.0 for f in frames]
+        audio_data = np.concatenate(audio_arrays, axis=0)
+        if len(audio_data.shape) == 1:
+            audio_data = audio_data[:, np.newaxis]
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            sf.write(tmp.name, audio_data, samplerate=48000)
+            tmp_path = tmp.name
+        with open(tmp_path, "rb") as f_audio:
+            transcript = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=f_audio
+            )
+            st.session_state.question_input = transcript.text
+            st.success(f"Texte reconnu : {transcript.text}")
+
 with col_chat:
     st.subheader("💬 Chat pédagogique")
-
-    # === Reconnaissance vocale
-    webrtc_ctx = webrtc_streamer(
-        key="voice",
-        mode=WebRtcMode.SENDONLY,
-        audio_receiver_size=256,
-        media_stream_constraints={"audio": True, "video": False},
-    )
-
-    if webrtc_ctx.audio_receiver:
-        frames = webrtc_ctx.audio_receiver.get_frames(timeout=0.1)
-        if frames:
-            audio_data = np.concatenate([f.to_ndarray() for f in frames], axis=0)
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-                sf.write(tmp.name, audio_data, 48000)
-                tmp_path = tmp.name
-            with open(tmp_path, "rb") as f_audio:
-                transcript = client.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=f_audio
-                )
-                st.session_state.question_input = transcript.text
-                st.success(f"Texte reconnu : {transcript.text}")
-
     with st.form("chat_form"):
         st.text_area("Ta question", key="question_input")
         st.form_submit_button("Envoyer", on_click=submit_question)
-
     for msg in reversed(st.session_state.chat_history):
         st.markdown("**❓ Question :**")
         st.markdown(msg["question"])
