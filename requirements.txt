@@ -5,3 +5,5 @@ pymupdf
 pdf2image
 streamlit-webrtc
 soundfile
+SpeechRecognition
+pydub
