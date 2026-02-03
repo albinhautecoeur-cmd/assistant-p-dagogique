@@ -72,7 +72,7 @@ def text_to_image(text, width=600):
     return img
 
 # ======================
-# ✅ CORRECTION LATEX STREAMLIT — DÉFINITIVE
+# ✅ CORRECTION LATEX STREAMLIT — ULTIME
 # ======================
 def fix_latex_for_streamlit(text: str) -> str:
     # 1. \[ ... \] → $$ ... $$
@@ -81,35 +81,43 @@ def fix_latex_for_streamlit(text: str) -> str:
     # 2. \( ... \) → $ ... $
     text = re.sub(r"\\\((.*?)\\\)", r"$\1$", text, flags=re.S)
 
-    # 3. Lignes mathématiques complètes sans délimiteurs
+    # 3. Lignes math complètes sans délimiteurs
     lines = text.split("\n")
-    fixed_lines = []
+    processed = []
 
     for line in lines:
         stripped = line.strip()
+
+        # 5. Ligne = un seul symbole math (U, d, E, x…)
+        if re.fullmatch(r"[A-Za-z]", stripped):
+            processed.append(f"$$ {stripped} $$")
+            continue
+
+        # Formule complète
         is_math_line = (
             "\\" in stripped
-            and any(cmd in stripped for cmd in ["\\sqrt", "\\frac", "^", "_"])
-            and "=" in stripped
+            and any(cmd in stripped for cmd in ["\\sqrt", "\\frac", "^", "_", "="])
         )
 
         if is_math_line and not stripped.startswith("$"):
-            fixed_lines.append(f"$$\n{stripped}\n$$")
+            processed.append(f"$$\n{stripped}\n$$")
         else:
-            fixed_lines.append(line)
+            processed.append(line)
 
-    text = "\n".join(fixed_lines)
+    text = "\n".join(processed)
 
-    # 4. ✅ COMMANDES LATEX INLINE DANS LE TEXTE (ex: \vec{E})
+    # 4. Commandes LaTeX inline (\vec{E}, \alpha…)
     def wrap_inline(match):
-        expr = match.group(0)
-        return f"${expr}$"
+        return f"${match.group(0)}$"
 
     text = re.sub(
         r"(?<!\$)(\\[a-zA-Z]+(\{[^}]+\})?)(?!\$)",
         wrap_inline,
         text
     )
+
+    # 6. Suppression des doublons consécutifs
+    text = re.sub(r"(\$\$?\s*[^$]+\s*\$\$?)\s*\1", r"\1", text)
 
     return text
 
