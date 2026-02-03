@@ -18,17 +18,12 @@ client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 PROMPT_PEDAGOGIQUE = """
 Tu es un assistant pédagogique bienveillant.
 Explique clairement, simplement, avec des exemples si nécessaire.
-Ne dépasse pas 60 mots.
+Ne dépasse pas 60 mots que ce soit pour les rappels ou pour la réponse chat.
 Tu ne donnes jamais la réponse directement, tu guides progressivement l'élève.
-
-⚠️ RÈGLES STRICTES D'ÉCRITURE DES FORMULES :
-
-1. Toutes les formules mathématiques doivent être écrites en LaTeX valide.
-2. Les formules en ligne doivent être écrites avec : \( ... \)
-3. Les formules importantes doivent être écrites seules sur une ligne avec : \[ ... \]
-4. Ne jamais écrire de formule dans une liste numérotée ou collée à du texte.
-5. Toujours laisser une ligne vide avant et après les formules en bloc.
-6. N'utilise jamais de bloc ```latex```.
+Quand tu écris des formules mathématiques :
+- utilise \( ... \) pour les formules en ligne
+- utilise \[ ... \] pour les formules en bloc
+- n’utilise jamais de blocs de code LaTeX
 
 Voici le document de l'élève :
 """
@@ -77,43 +72,39 @@ def text_to_image(text, width=600):
     return img
 
 # ======================
-# ✅ CORRECTION LATEX STREAMLIT — ROBUSTE
+# ✅ CORRECTION LATEX STREAMLIT — DÉFINITIVE
 # ======================
 def fix_latex_for_streamlit(text: str) -> str:
-    """
-    Transforme automatiquement le texte du modèle en Markdown compatible Streamlit KaTeX.
-    - Toutes les lignes avec des formules (frac, sqrt, log, div, times, etc.) sont mises en $$ ... $$.
-    - Corrige \text{} pour KaTeX.
-    """
+    # 🔧 Réparer les formules cassées par retours ligne (PDF/Word)
+    text = re.sub(r"I\s*\n\s*0", r"I_0", text)
+    text = re.sub(r"10\s*\n\s*-\s*12", r"10^{-12}", text)
+    text = re.sub(r"W\s*/\s*m\s*2", r"\\text{W/m}^2", text)
 
-    # Corriger \text{} pour KaTeX
-    text = text.replace(r"\text", r"\\text")
-
-    # Convertir \( ... \) en $ ... $
-    text = re.sub(r"\\\((.*?)\\\)", r"$\1$", text, flags=re.S)
-
-    # Convertir \[ ... \] en $$ ... $$
+    # 1. \[ ... \] → $$ ... $$
     text = re.sub(r"\\\[(.*?)\\\]", r"$$\1$$", text, flags=re.S)
 
-    # Séparer le texte ligne par ligne
+    # 2. \( ... \) → $ ... $
+    text = re.sub(r"\\\((.*?)\\\)", r"$\1$", text, flags=re.S)
+
+    # 3. Lignes mathématiques complètes sans délimiteurs
     lines = text.split("\n")
     fixed_lines = []
 
     for line in lines:
         stripped = line.strip()
+        is_math_line = (
+            "\\" in stripped
+            and any(cmd in stripped for cmd in ["\\sqrt", "\\frac", "\\log"])
+            and "=" in stripped
+        )
 
-        # Si la ligne contient une formule LaTeX → la mettre en bloc $$ ... $$
-        math_cmds = ["\\frac", "\\sqrt", "\\log", "\\div", "\\times", "\\cdot", "\\sum", "\\int"]
-        if any(cmd in stripped for cmd in math_cmds):
-            # Ajouter une ligne vide avant et après pour KaTeX
-            fixed_lines.append("")  
-            fixed_lines.append(f"$${stripped}$$")
-            fixed_lines.append("")
+        if is_math_line and not stripped.startswith("$"):
+            fixed_lines.append(f"$$\n{stripped}\n$$")
         else:
             fixed_lines.append(line)
 
-    # Rejoindre toutes les lignes
-    return "\n".join(fixed_lines)
+    text = "\n".join(fixed_lines)
+    return text
 
 # ======================
 # SESSION
