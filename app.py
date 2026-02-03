@@ -190,7 +190,7 @@ Maximum 100 mots.
                 messages=[{"role": "user", "content": prompt_rappel}]
             )
             st.markdown("**📚 Rappel de cours :**")
-            st.write(response.choices[0].message.content)
+            st.markdown(response.choices[0].message.content)
 
 # ======================
 # CHAT
@@ -227,9 +227,10 @@ with col_chat:
     # 🔁 AFFICHAGE DU PLUS RÉCENT AU PLUS ANCIEN
     for msg in reversed(st.session_state.chat_history):
         st.markdown("**❓ Question :**")
-        st.write(msg["question"])
+        st.markdown(msg["question"])
         st.markdown("**🤖 Assistant :**")
-        st.write(msg["answer"])
+        st.markdown(msg["answer"])
         st.markdown("---")
+
 
 
