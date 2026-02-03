@@ -72,30 +72,24 @@ def text_to_image(text, width=600):
     return img
 
 # ======================
-# ✅ CORRECTION LATEX STREAMLIT — DÉFINITIVE
+# ✅ CORRECTION LATEX STREAMLIT — AMÉLIORÉE
 # ======================
 def fix_latex_for_streamlit(text: str) -> str:
-    # 🔧 Réparer les formules cassées par retours ligne (PDF/Word)
-    text = re.sub(r"I\s*\n\s*0", r"I_0", text)
-    text = re.sub(r"10\s*\n\s*-\s*12", r"10^{-12}", text)
-    text = re.sub(r"W\s*/\s*m\s*2", r"\\text{W/m}^2", text)
-
     # 1. \[ ... \] → $$ ... $$
     text = re.sub(r"\\\[(.*?)\\\]", r"$$\1$$", text, flags=re.S)
 
     # 2. \( ... \) → $ ... $
     text = re.sub(r"\\\((.*?)\\\)", r"$\1$", text, flags=re.S)
 
-    # 3. Lignes mathématiques complètes sans délimiteurs
     lines = text.split("\n")
     fixed_lines = []
 
     for line in lines:
         stripped = line.strip()
+
         is_math_line = (
-            "\\" in stripped
-            and any(cmd in stripped for cmd in ["\\sqrt", "\\frac", "\\log"])
-            and "=" in stripped
+            "\\" in stripped and
+            any(cmd in stripped for cmd in ["\\frac", "\\sqrt", "\\log", "\\div", "\\times"])
         )
 
         if is_math_line and not stripped.startswith("$"):
@@ -103,8 +97,7 @@ def fix_latex_for_streamlit(text: str) -> str:
         else:
             fixed_lines.append(line)
 
-    text = "\n".join(fixed_lines)
-    return text
+    return "\n".join(fixed_lines)
 
 # ======================
 # SESSION
