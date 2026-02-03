@@ -25,39 +25,10 @@ Tu ne donnes jamais la réponse directement, tu guides progressivement l'élève
 
 1. Toutes les formules mathématiques doivent être écrites en LaTeX valide.
 2. Les formules en ligne doivent être écrites avec : \( ... \)
-3. Les formules importantes doivent être écrites seules sur une ligne avec :
-
-\[ ... \]
-
-4. Ne JAMAIS écrire de formule mathématique :
-   - dans une liste numérotée (1. 2. 3.)
-   - sur la même ligne qu’un numéro
-   - collée à du texte sans retour à la ligne
-
-5. Toujours laisser :
-   - une ligne vide AVANT une formule en bloc
-   - une ligne vide APRÈS une formule en bloc
-
-6. Exemple CORRECT :
-
-Voici deux fractions :
-
-\[
-\frac{a}{b}
-\]
-
-et
-
-\[
-\frac{c}{d}
-\]
-
-7. Exemple INTERDIT :
-
-1. On a \(\frac{a}{b}\) et \(\frac{c}{d}\)
-2. \(\frac{a}{b} \div \frac{c}{d}\)
-
-8. N’utilise JAMAIS de bloc ```latex```.
+3. Les formules importantes doivent être écrites seules sur une ligne avec : \[ ... \]
+4. Ne jamais écrire de formule dans une liste numérotée ou collée à du texte.
+5. Toujours laisser une ligne vide avant et après les formules en bloc.
+6. N'utilise jamais de bloc ```latex```.
 
 Voici le document de l'élève :
 """
@@ -106,10 +77,16 @@ def text_to_image(text, width=600):
     return img
 
 # ======================
-# ✅ CORRECTION LATEX STREAMLIT (ROBUSTE)
+# ✅ CORRECTION LATEX STREAMLIT — ROBUSTE
 # ======================
 def fix_latex_for_streamlit(text: str) -> str:
-    # Corriger \text pour KaTeX
+    """
+    Transforme automatiquement le texte du modèle en Markdown compatible Streamlit KaTeX.
+    - Toutes les lignes avec des formules (frac, sqrt, log, div, times, etc.) sont mises en $$ ... $$.
+    - Corrige \text{} pour KaTeX.
+    """
+
+    # Corriger \text{} pour KaTeX
     text = text.replace(r"\text", r"\\text")
 
     # Convertir \( ... \) en $ ... $
@@ -118,18 +95,24 @@ def fix_latex_for_streamlit(text: str) -> str:
     # Convertir \[ ... \] en $$ ... $$
     text = re.sub(r"\\\[(.*?)\\\]", r"$$\1$$", text, flags=re.S)
 
+    # Séparer le texte ligne par ligne
     lines = text.split("\n")
     fixed_lines = []
 
     for line in lines:
         stripped = line.strip()
 
-        # Si la ligne contient une fraction → la rendre mathématique
-        if r"\frac" in stripped:
-            fixed_lines.append("$$" + stripped + "$$")
+        # Si la ligne contient une formule LaTeX → la mettre en bloc $$ ... $$
+        math_cmds = ["\\frac", "\\sqrt", "\\log", "\\div", "\\times", "\\cdot", "\\sum", "\\int"]
+        if any(cmd in stripped for cmd in math_cmds):
+            # Ajouter une ligne vide avant et après pour KaTeX
+            fixed_lines.append("")  
+            fixed_lines.append(f"$${stripped}$$")
+            fixed_lines.append("")
         else:
             fixed_lines.append(line)
 
+    # Rejoindre toutes les lignes
     return "\n".join(fixed_lines)
 
 # ======================
@@ -292,4 +275,3 @@ with col_chat:
         st.markdown("**🤖 Assistant :**")
         st.markdown(fix_latex_for_streamlit(msg["answer"]))
         st.markdown("---")
-
