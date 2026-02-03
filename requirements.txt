@@ -4,3 +4,4 @@ python-docx
 pymupdf
 pdf2image
 streamlit-webrtc
+soundfile
