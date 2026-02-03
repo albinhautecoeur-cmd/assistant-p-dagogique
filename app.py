@@ -8,7 +8,7 @@ from PIL import Image, ImageDraw, ImageFont
 import io
 import docx
 import fitz  # PyMuPDF
-import easyocr  # OCR pour lire les images
+import base64  # Pour convertir les images en base64
 
 # ======================
 # CONFIG
@@ -73,17 +73,6 @@ def text_to_image(text, width=600):
     return img
 
 # ======================
-# OCR avec EasyOCR
-# ======================
-ocr_reader = easyocr.Reader(['fr'])  # initialise EasyOCR en français
-
-def ocr_image(image):
-    """Renvoie le texte extrait d'une image"""
-    result = ocr_reader.readtext(image)
-    texte = " ".join([line[1] for line in result])
-    return texte
-
-# ======================
 # ✅ CORRECTION LATEX STREAMLIT — DÉFINITIVE
 # ======================
 def fix_latex_for_streamlit(text: str) -> str:
@@ -92,8 +81,10 @@ def fix_latex_for_streamlit(text: str) -> str:
     text = re.sub(r"W\s*/\s*m\s*2", r"\\text{W/m}^2", text)
     text = re.sub(r"\\\[(.*?)\\\]", r"$$\1$$", text, flags=re.S)
     text = re.sub(r"\\\((.*?)\\\)", r"$\1$", text, flags=re.S)
+
     lines = text.split("\n")
     fixed_lines = []
+
     for line in lines:
         stripped = line.strip()
         is_math_line = (
@@ -105,7 +96,25 @@ def fix_latex_for_streamlit(text: str) -> str:
             fixed_lines.append(f"$$\n{stripped}\n$$")
         else:
             fixed_lines.append(line)
+
     return "\n".join(fixed_lines)
+
+# ======================
+# OCR IMAGE VIA OPENAI
+# ======================
+def ocr_image_via_openai(img: Image.Image) -> str:
+    buffered = io.BytesIO()
+    img.save(buffered, format="PNG")
+    img_b64 = base64.b64encode(buffered.getvalue()).decode()
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{
+            "role": "user",
+            "content": f"Lis et extrais le texte de cette image (PNG en base64) : {img_b64}"
+        }]
+    )
+    return response.choices[0].message.content
 
 # ======================
 # SESSION
@@ -131,8 +140,10 @@ active_users = clean_expired_sessions()
 # ======================
 if not st.session_state.connected:
     st.title("🔐 Connexion élève")
+
     username = st.text_input("Identifiant")
     password = st.text_input("Mot de passe", type="password")
+
     if st.button("Connexion"):
         active_users = clean_expired_sessions()
         if username in USERS and USERS[username] == password:
@@ -153,11 +164,13 @@ if not st.session_state.connected:
 # INTERFACE
 # ======================
 st.title("🧠 Mon Assistant pédagogique")
+
 if st.button("🚪 Déconnexion"):
     active_users = load_active_users()
     if st.session_state.username in active_users:
         del active_users[st.session_state.username]
         save_active_users(active_users)
+
     st.session_state.connected = False
     st.session_state.username = None
     st.session_state.document_content = ""
@@ -174,16 +187,15 @@ col_doc, col_chat = st.columns([1, 2])
 with col_doc:
     st.subheader("📄 Document de travail")
     uploaded_file = st.file_uploader("Dépose ton document", type=["txt", "docx", "pdf", "png", "jpg", "jpeg"])
+
     if uploaded_file:
         content = ""
         images = []
 
-        # TXT
         if uploaded_file.name.endswith(".txt"):
             content = uploaded_file.read().decode("utf-8")
             images = [text_to_image(content)]
 
-        # DOCX
         elif uploaded_file.name.endswith(".docx"):
             doc = docx.Document(uploaded_file)
             content = "\n".join([p.text for p in doc.paragraphs])
@@ -196,7 +208,6 @@ with col_doc:
                     img.thumbnail((600, 800))
                     images.append(img)
 
-        # PDF
         elif uploaded_file.name.endswith(".pdf"):
             pdf_bytes = uploaded_file.read()
             pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
@@ -207,13 +218,12 @@ with col_doc:
                 img.thumbnail((600, 800))
                 images.append(img)
 
-        # IMAGE (OCR)
         elif uploaded_file.name.lower().endswith((".png", ".jpg", ".jpeg")):
             img = Image.open(uploaded_file)
             img.thumbnail((600, 800))
             images.append(img)
-            # Lire le texte avec OCR
-            content = ocr_image(img)
+            # OCR via OpenAI
+            content += ocr_image_via_openai(img)
 
         st.session_state.document_content = content
         st.session_state.document_images = images
@@ -225,6 +235,7 @@ with col_doc:
 with col_chat:
     st.subheader("📝 Rappel de cours")
     mots_cles = st.text_input("Ne mets ici que des Mots-clés, c'est suffisant")
+
     if st.button("Obtenir le rappel"):
         if mots_cles:
             response = client.chat.completions.create(
@@ -247,20 +258,25 @@ def submit_question():
             + "\n\nQUESTION:\n"
             + q
         )
+
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}]
         )
+
         st.session_state.chat_history.append(
             {"question": q, "answer": response.choices[0].message.content}
         )
+
         st.session_state.question_input = ""
 
 with col_chat:
     st.subheader("💬 Chat pédagogique")
+
     with st.form("chat_form"):
         st.text_area("Ta question", key="question_input")
         st.form_submit_button("Envoyer", on_click=submit_question)
+
     for msg in reversed(st.session_state.chat_history):
         st.markdown("**❓ Question :**")
         st.markdown(msg["question"])
