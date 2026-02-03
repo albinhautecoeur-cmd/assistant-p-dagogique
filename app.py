@@ -1,4 +1,3 @@
-
 import streamlit as st
 import json
 import os
@@ -76,6 +75,11 @@ def text_to_image(text, width=600):
 # ✅ CORRECTION LATEX STREAMLIT — DÉFINITIVE
 # ======================
 def fix_latex_for_streamlit(text: str) -> str:
+    # 🔧 Réparer les formules cassées par retours ligne (PDF/Word)
+    text = re.sub(r"I\s*\n\s*0", r"I_0", text)
+    text = re.sub(r"10\s*\n\s*-\s*12", r"10^{-12}", text)
+    text = re.sub(r"W\s*/\s*m\s*2", r"\\text{W/m}^2", text)
+
     # 1. \[ ... \] → $$ ... $$
     text = re.sub(r"\\\[(.*?)\\\]", r"$$\1$$", text, flags=re.S)
 
@@ -100,8 +104,6 @@ def fix_latex_for_streamlit(text: str) -> str:
             fixed_lines.append(line)
 
     text = "\n".join(fixed_lines)
-
-    # ❌ NE PAS encapsuler les commandes LaTeX individuellement
     return text
 
 # ======================
