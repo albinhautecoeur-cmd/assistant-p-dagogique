@@ -2,6 +2,7 @@ import streamlit as st
 import json
 import os
 import time
+import re
 from openai import OpenAI
 from PIL import Image, ImageDraw, ImageFont
 import io
@@ -19,11 +20,12 @@ Tu es un assistant pédagogique bienveillant.
 Explique clairement, simplement, avec des exemples si nécessaire.
 Ne dépasse pas 60 mots.
 Tu ne donnes jamais la réponse directement, tu guides progressivement l'élève.
-
-IMPORTANT – écriture mathématique :
+Quand tu écris des formules mathématiques :
 - utilise \( ... \) pour les formules en ligne
 - utilise \[ ... \] pour les formules en bloc
-- n’utilise JAMAIS de blocs de code LaTeX
+- n’utilise jamais de blocs de code LaTeX
+
+Voici le document de l'élève :
 """
 
 USERS_FILE = "users.json"
@@ -54,21 +56,62 @@ def clean_expired_sessions():
     save_active_users(updated)
     return updated
 
-def safe_text_to_image(text, max_lines=300, width=600):
-    lines = text.split("\n")[:max_lines]
+def text_to_image(text, width=600):
     font = ImageFont.load_default()
-    line_height = 14
-    height = 20 + line_height * len(lines)
-
+    lines = text.split("\n")
+    dummy_img = Image.new("RGB", (width, 1000))
+    draw = ImageDraw.Draw(dummy_img)
+    line_height = draw.textbbox((0,0), "Hg", font=font)[3] + 4
+    height = line_height * len(lines) + 20
     img = Image.new("RGB", (width, height), "white")
     draw = ImageDraw.Draw(img)
-
     y = 10
     for line in lines:
-        draw.text((10, y), line[:120], fill="black", font=font)
+        draw.text((10, y), line, fill="black", font=font)
         y += line_height
-
     return img
+
+# ======================
+# ✅ CORRECTION LATEX STREAMLIT — DÉFINITIVE
+# ======================
+def fix_latex_for_streamlit(text: str) -> str:
+    # 1. \[ ... \] → $$ ... $$
+    text = re.sub(r"\\\[(.*?)\\\]", r"$$\1$$", text, flags=re.S)
+
+    # 2. \( ... \) → $ ... $
+    text = re.sub(r"\\\((.*?)\\\)", r"$\1$", text, flags=re.S)
+
+    # 3. Lignes mathématiques complètes sans délimiteurs
+    lines = text.split("\n")
+    fixed_lines = []
+
+    for line in lines:
+        stripped = line.strip()
+        is_math_line = (
+            "\\" in stripped
+            and any(cmd in stripped for cmd in ["\\sqrt", "\\frac", "^", "_"])
+            and "=" in stripped
+        )
+
+        if is_math_line and not stripped.startswith("$"):
+            fixed_lines.append(f"$$\n{stripped}\n$$")
+        else:
+            fixed_lines.append(line)
+
+    text = "\n".join(fixed_lines)
+
+    # 4. ✅ COMMANDES LATEX INLINE DANS LE TEXTE (ex: \vec{E})
+    def wrap_inline(match):
+        expr = match.group(0)
+        return f"${expr}$"
+
+    text = re.sub(
+        r"(?<!\$)(\\[a-zA-Z]+(\{[^}]+\})?)(?!\$)",
+        wrap_inline,
+        text
+    )
+
+    return text
 
 # ======================
 # SESSION
@@ -79,6 +122,10 @@ if "username" not in st.session_state:
     st.session_state.username = None
 if "document_content" not in st.session_state:
     st.session_state.document_content = ""
+if "document_images" not in st.session_state:
+    st.session_state.document_images = []
+if "question_input" not in st.session_state:
+    st.session_state.question_input = ""
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
@@ -95,23 +142,40 @@ if not st.session_state.connected:
     password = st.text_input("Mot de passe", type="password")
 
     if st.button("Connexion"):
+        active_users = clean_expired_sessions()
         if username in USERS and USERS[username] == password:
-            active = load_active_users()
-            if username in active:
-                st.error("❌ Compte déjà connecté.")
+            active_users = load_active_users()
+            if username in active_users:
+                st.error("❌ Ce compte est déjà connecté sur un autre appareil.")
             else:
-                active[username] = time.time()
-                save_active_users(active)
+                active_users[username] = time.time()
+                save_active_users(active_users)
                 st.session_state.connected = True
                 st.session_state.username = username
+                st.success("Connexion réussie")
         else:
-            st.error("Identifiants incorrects")
+            st.error("Identifiant ou mot de passe incorrect")
     st.stop()
 
 # ======================
 # INTERFACE
 # ======================
 st.title("🧠 Mon Assistant pédagogique")
+
+if st.button("🚪 Déconnexion"):
+    active_users = load_active_users()
+    if st.session_state.username in active_users:
+        del active_users[st.session_state.username]
+        save_active_users(active_users)
+
+    st.session_state.connected = False
+    st.session_state.username = None
+    st.session_state.document_content = ""
+    st.session_state.document_images = []
+    st.session_state.chat_history = []
+    st.experimental_set_query_params()
+    st.stop()
+
 col_doc, col_chat = st.columns([1, 2])
 
 # ======================
@@ -123,48 +187,53 @@ with col_doc:
 
     if uploaded_file:
         content = ""
+        images = []
 
         if uploaded_file.name.endswith(".txt"):
-            content = uploaded_file.read().decode("utf-8", errors="ignore")
-            st.image(safe_text_to_image(content), use_column_width=True)
+            content = uploaded_file.read().decode("utf-8")
+            images = [text_to_image(content)]
 
         elif uploaded_file.name.endswith(".docx"):
             doc = docx.Document(uploaded_file)
-            content = "\n".join(p.text for p in doc.paragraphs)
-            st.image(safe_text_to_image(content), use_column_width=True)
+            content = "\n".join([p.text for p in doc.paragraphs])
+            images = [text_to_image(content)]
+            for rel in doc.part._rels:
+                rel_obj = doc.part._rels[rel]
+                if "image" in rel_obj.target_ref:
+                    image_data = rel_obj.target_part.blob
+                    img = Image.open(io.BytesIO(image_data))
+                    img.thumbnail((600, 800))
+                    images.append(img)
 
         elif uploaded_file.name.endswith(".pdf"):
-            pdf = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-            for page in pdf:
-                pix = page.get_pixmap(dpi=150)
-                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                st.image(img, use_column_width=True)
+            pdf_bytes = uploaded_file.read()
+            pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            for page in pdf_doc:
                 content += page.get_text()
+                pix = page.get_pixmap()
+                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                img.thumbnail((600, 800))
+                images.append(img)
 
         st.session_state.document_content = content
+        st.session_state.document_images = images
+        st.image(images, use_column_width=True)
 
 # ======================
-# RAPPEL DE COURS (RESTAURÉ)
+# RAPPEL
 # ======================
 with col_chat:
     st.subheader("📝 Rappel de cours")
-    mots_cles = st.text_input("Ne mets ici que des mots-clés")
+    mots_cles = st.text_input("Ne mets ici que des Mots-clés, c'est suffisant")
 
     if st.button("Obtenir le rappel"):
         if mots_cles:
-            prompt_rappel = f"""
-Tu es un assistant pédagogique bienveillant.
-Fais un rappel de cours clair basé sur ces mots-clés : {mots_cles}
-Maximum 100 mots.
-Utilise \( ... \) et \[ ... \] si nécessaire.
-"""
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt_rappel}]
+                messages=[{"role": "user", "content": mots_cles}]
             )
-
             st.markdown("**📚 Rappel de cours :**")
-            st.markdown(response.choices[0].message.content)
+            st.markdown(fix_latex_for_streamlit(response.choices[0].message.content))
 
 # ======================
 # CHAT
@@ -175,7 +244,7 @@ def submit_question():
         prompt = (
             PROMPT_PEDAGOGIQUE
             + "\n\nDOCUMENT:\n"
-            + st.session_state.document_content[:4000]
+            + st.session_state.document_content
             + "\n\nQUESTION:\n"
             + q
         )
@@ -185,8 +254,10 @@ def submit_question():
             messages=[{"role": "user", "content": prompt}]
         )
 
-        answer = response.choices[0].message.content or ""
-        st.session_state.chat_history.append(answer)
+        st.session_state.chat_history.append(
+            {"question": q, "answer": response.choices[0].message.content}
+        )
+
         st.session_state.question_input = ""
 
 with col_chat:
@@ -196,6 +267,9 @@ with col_chat:
         st.text_area("Ta question", key="question_input")
         st.form_submit_button("Envoyer", on_click=submit_question)
 
-    for answer in reversed(st.session_state.chat_history):
-        st.markdown(answer)
+    for msg in reversed(st.session_state.chat_history):
+        st.markdown("**❓ Question :**")
+        st.markdown(msg["question"])
+        st.markdown("**🤖 Assistant :**")
+        st.markdown(fix_latex_for_streamlit(msg["answer"]))
         st.markdown("---")
