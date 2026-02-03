@@ -72,7 +72,7 @@ def text_to_image(text, width=600):
     return img
 
 # ======================
-# ✅ CORRECTION LATEX DÉFINITIVE STREAMLIT
+# ✅ CORRECTION LATEX STREAMLIT — DÉFINITIVE
 # ======================
 def fix_latex_for_streamlit(text: str) -> str:
     # 1. \[ ... \] → $$ ... $$
@@ -81,25 +81,37 @@ def fix_latex_for_streamlit(text: str) -> str:
     # 2. \( ... \) → $ ... $
     text = re.sub(r"\\\((.*?)\\\)", r"$\1$", text, flags=re.S)
 
-    # 3. Détection de lignes LaTeX brutes
+    # 3. Lignes mathématiques complètes sans délimiteurs
     lines = text.split("\n")
     fixed_lines = []
 
     for line in lines:
         stripped = line.strip()
-
-        is_math = (
-            "\\" in stripped and
-            any(cmd in stripped for cmd in ["\\sqrt", "\\frac", "^", "_"]) and
-            "=" in stripped
+        is_math_line = (
+            "\\" in stripped
+            and any(cmd in stripped for cmd in ["\\sqrt", "\\frac", "^", "_"])
+            and "=" in stripped
         )
 
-        if is_math and not stripped.startswith("$"):
+        if is_math_line and not stripped.startswith("$"):
             fixed_lines.append(f"$$\n{stripped}\n$$")
         else:
             fixed_lines.append(line)
 
-    return "\n".join(fixed_lines)
+    text = "\n".join(fixed_lines)
+
+    # 4. ✅ COMMANDES LATEX INLINE DANS LE TEXTE (ex: \vec{E})
+    def wrap_inline(match):
+        expr = match.group(0)
+        return f"${expr}$"
+
+    text = re.sub(
+        r"(?<!\$)(\\[a-zA-Z]+(\{[^}]+\})?)(?!\$)",
+        wrap_inline,
+        text
+    )
+
+    return text
 
 # ======================
 # SESSION
