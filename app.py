@@ -9,8 +9,8 @@ import io
 import docx
 import fitz  # PyMuPDF
 from streamlit_webrtc import webrtc_streamer, WebRtcMode
+import queue
 import tempfile
-import soundfile as sf
 
 # ======================
 # CONFIG
@@ -21,7 +21,7 @@ client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 PROMPT_PEDAGOGIQUE = """
 Tu es un assistant pédagogique bienveillant.
 Explique clairement, simplement, avec des exemples si nécessaire.
-Ne dépasse pas 60 mots.
+Ne dépasse pas 60 mots que ce soit pour les rappels ou pour la réponse chat.
 Tu ne donnes jamais la réponse directement, tu guides progressivement l'élève.
 
 Quand tu écris des formules mathématiques :
@@ -79,18 +79,13 @@ def text_to_image(text, width=600):
 # ✅ CORRECTION LATEX STREAMLIT
 # ======================
 def fix_latex_for_streamlit(text: str) -> str:
-    # Corriger retours ligne PDF
     text = re.sub(r"I\s*\n\s*0", r"I_0", text)
     text = re.sub(r"10\s*\n\s*-\s*12", r"10^{-12}", text)
     text = re.sub(r"W\s*/\s*m\s*2", r"\\text{W/m}^2", text)
 
-    # \[ ... \] → $$ ... $$
     text = re.sub(r"\\\[(.*?)\\\]", r"$$\1$$", text, flags=re.S)
-
-    # \( ... \) → $ ... $
     text = re.sub(r"\\\((.*?)\\\)", r"$\1$", text, flags=re.S)
 
-    # Lignes mathématiques complètes → $$ ... $$
     lines = text.split("\n")
     fixed_lines = []
 
@@ -103,7 +98,6 @@ def fix_latex_for_streamlit(text: str) -> str:
             fixed_lines.append("")  # ligne vide après
         else:
             fixed_lines.append(line)
-
     return "\n".join(fixed_lines)
 
 # ======================
@@ -132,7 +126,6 @@ if not st.session_state.connected:
     st.title("🔐 Connexion élève")
     username = st.text_input("Identifiant")
     password = st.text_input("Mot de passe", type="password")
-
     if st.button("Connexion"):
         active_users = clean_expired_sessions()
         if username in USERS and USERS[username] == password:
@@ -153,13 +146,11 @@ if not st.session_state.connected:
 # INTERFACE
 # ======================
 st.title("🧠 Mon Assistant pédagogique")
-
 if st.button("🚪 Déconnexion"):
     active_users = load_active_users()
     if st.session_state.username in active_users:
         del active_users[st.session_state.username]
         save_active_users(active_users)
-
     st.session_state.connected = False
     st.session_state.username = None
     st.session_state.document_content = ""
@@ -168,23 +159,20 @@ if st.button("🚪 Déconnexion"):
     st.experimental_set_query_params()
     st.stop()
 
-col_doc, col_chat = st.columns([1, 2])
+col_doc, col_chat = st.columns([1,2])
 
 # ======================
 # DOCUMENT
 # ======================
 with col_doc:
     st.subheader("📄 Document de travail")
-    uploaded_file = st.file_uploader("Dépose ton document", type=["txt", "docx", "pdf"])
-
+    uploaded_file = st.file_uploader("Dépose ton document", type=["txt","docx","pdf"])
     if uploaded_file:
         content = ""
         images = []
-
         if uploaded_file.name.endswith(".txt"):
             content = uploaded_file.read().decode("utf-8")
             images = [text_to_image(content)]
-
         elif uploaded_file.name.endswith(".docx"):
             doc = docx.Document(uploaded_file)
             content = "\n".join([p.text for p in doc.paragraphs])
@@ -194,19 +182,17 @@ with col_doc:
                 if "image" in rel_obj.target_ref:
                     image_data = rel_obj.target_part.blob
                     img = Image.open(io.BytesIO(image_data))
-                    img.thumbnail((600, 800))
+                    img.thumbnail((600,800))
                     images.append(img)
-
         elif uploaded_file.name.endswith(".pdf"):
             pdf_bytes = uploaded_file.read()
             pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
             for page in pdf_doc:
                 content += page.get_text()
                 pix = page.get_pixmap()
-                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                img.thumbnail((600, 800))
+                img = Image.frombytes("RGB",[pix.width,pix.height], pix.samples)
+                img.thumbnail((600,800))
                 images.append(img)
-
         st.session_state.document_content = content
         st.session_state.document_images = images
         st.image(images, use_column_width=True)
@@ -217,18 +203,17 @@ with col_doc:
 with col_chat:
     st.subheader("📝 Rappel de cours")
     mots_cles = st.text_input("Ne mets ici que des Mots-clés, c'est suffisant")
-
     if st.button("Obtenir le rappel"):
         if mots_cles:
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=[{"role": "user", "content": mots_cles}]
+                messages=[{"role":"user","content":mots_cles}]
             )
             st.markdown("**📚 Rappel de cours :**")
             st.markdown(fix_latex_for_streamlit(response.choices[0].message.content))
 
 # ======================
-# CHAT + RECONNAISSANCE VOCALE
+# CHAT + VOIX
 # ======================
 def submit_question():
     q = st.session_state.question_input
@@ -236,41 +221,41 @@ def submit_question():
         prompt = PROMPT_PEDAGOGIQUE + "\n\nDOCUMENT:\n" + st.session_state.document_content + "\n\nQUESTION:\n" + q
         response = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role":"user","content":prompt}]
         )
-        st.session_state.chat_history.append(
-            {"question": q, "answer": response.choices[0].message.content}
-        )
+        st.session_state.chat_history.append({"question": q,"answer":response.choices[0].message.content})
         st.session_state.question_input = ""
 
 with col_chat:
     st.subheader("💬 Chat pédagogique (texte ou voix)")
 
     # --- Reconnaissance vocale ---
-    if st.checkbox("🎤 Utiliser la reconnaissance vocale"):
+    use_voice = st.checkbox("🎤 Utiliser la reconnaissance vocale")
+    if use_voice:
         webrtc_ctx = webrtc_streamer(
             key="speech-to-text",
             mode=WebRtcMode.SENDONLY,
             audio_receiver_size=1024,
-            media_stream_constraints={"audio": True, "video": False}
+            media_stream_constraints={"audio":True,"video":False}
         )
 
         if webrtc_ctx.audio_receiver:
-            audio_frames = webrtc_ctx.audio_receiver.get_frames(timeout=1)
-            if audio_frames:
-                audio_data = b"".join([f.to_bytes() for f in audio_frames])
-                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-                    tmp.write(audio_data)
-                    tmp_path = tmp.name
-
-                audio_file = open(tmp_path, "rb")
-                transcript = client.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=audio_file
-                )
-                audio_file.close()
-                st.session_state.question_input = transcript.text
-                st.success(f"Texte reconnu : {transcript.text}")
+            try:
+                frames = webrtc_ctx.audio_receiver.get_frames(timeout=0.1)
+                if frames:
+                    audio_bytes = b"".join([f.to_bytes() for f in frames])
+                    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                        tmp.write(audio_bytes)
+                        tmp_path = tmp.name
+                    with open(tmp_path,"rb") as f_audio:
+                        transcript = client.audio.transcriptions.create(
+                            model="whisper-1",
+                            file=f_audio
+                        )
+                        st.session_state.question_input = transcript.text
+                        st.success(f"Texte reconnu : {transcript.text}")
+            except queue.Empty:
+                pass
 
     # --- Formulaire texte ---
     with st.form("chat_form"):
