@@ -84,6 +84,7 @@ def fix_latex_for_streamlit(text: str) -> str:
     text = re.sub(r"W\s*/\s*m\s*2", r"\\text{W/m}^2", text)
     text = re.sub(r"\\\[(.*?)\\\]", r"$$\1$$", text, flags=re.S)
     text = re.sub(r"\\\((.*?)\\\)", r"$\1$", text, flags=re.S)
+
     lines = text.split("\n")
     fixed_lines = []
     for line in lines:
@@ -233,56 +234,35 @@ def submit_question():
         )
         st.session_state.question_input = ""
 
-# ======================
-# Chat texte + vocal
-# ======================
 with col_chat:
     st.subheader("💬 Chat pédagogique")
-    # Texte
-    with st.form("chat_form"):
-        st.text_area("Ta question", key="question_input")
-        st.form_submit_button("Envoyer", on_click=submit_question)
 
-    # Vocal
-    st.subheader("🎤 Question vocale")
-    if "recording" not in st.session_state:
-        st.session_state.recording = False
-    if "audio_data" not in st.session_state:
-        st.session_state.audio_data = None
-
+    # Texte + enregistrement vocal
     webrtc_ctx = webrtc_streamer(
-        key="assistant-webrtc",
-        mode=WebRtcMode.SENDRECV,
-        audio_receiver_size=1024,
-        media_stream_constraints={"audio": True, "video": False},
+        key="speech",
+        mode=WebRtcMode.SENDONLY,
+        client_settings=ClientSettings(
+            rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
+            media_stream_constraints={"audio": True, "video": False}
+        ),
         async_processing=True
     )
 
-    if st.button("🎙 Start / Stop"):
-        st.session_state.recording = not st.session_state.recording
-        if st.session_state.recording:
-            st.success("Enregistrement démarré...")
-        else:
-            st.info("Enregistrement arrêté")
-            if webrtc_ctx.audio_receiver:
-                frames = webrtc_ctx.audio_receiver.get_frames(timeout=1)
-                if frames:
-                    audio_arrays = [f.to_ndarray().astype(np.float32)/32768.0 for f in frames]
-                    audio_data = np.concatenate(audio_arrays, axis=0)
-                    if len(audio_data.shape) == 1:
-                        audio_data = audio_data[:, np.newaxis]
-                    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-                        sf.write(tmp.name, audio_data, samplerate=48000)
-                        tmp_path = tmp.name
-                    with open(tmp_path, "rb") as f_audio:
-                        transcript = client.audio.transcriptions.create(
-                            model="whisper-1",
-                            file=f_audio
-                        )
-                    st.session_state.question_input = transcript.text
-                    st.success(f"Texte reconnu : {transcript.text}")
+    st.text_area("Ta question", key="question_input")
+    if st.button("Envoyer", on_click=submit_question):
+        pass
 
-    # Affichage chat
+    # Envoi de l'audio enregistré si disponible
+    if webrtc_ctx.audio_receiver:
+        frames = webrtc_ctx.audio_receiver.get_frames(timeout=1)
+        if frames:
+            audio_data = np.concatenate([f.to_ndarray() for f in frames], axis=0)
+            if len(audio_data) > 0:
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                    sf.write(tmp.name, audio_data, 48000)
+                    st.info(f"Audio enregistré : {tmp.name}")
+
+    # Historique des messages
     for msg in reversed(st.session_state.chat_history):
         st.markdown("**❓ Question :**")
         st.markdown(msg["question"])
