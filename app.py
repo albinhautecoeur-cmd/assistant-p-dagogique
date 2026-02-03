@@ -18,12 +18,46 @@ client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 PROMPT_PEDAGOGIQUE = """
 Tu es un assistant pédagogique bienveillant.
 Explique clairement, simplement, avec des exemples si nécessaire.
-Ne dépasse pas 60 mots que ce soit pour les rappels ou pour la réponse chat.
+Ne dépasse pas 60 mots.
 Tu ne donnes jamais la réponse directement, tu guides progressivement l'élève.
-Quand tu écris des formules mathématiques :
-- utilise \( ... \) pour les formules en ligne
-- utilise \[ ... \] pour les formules en bloc
-- n’utilise jamais de blocs de code LaTeX
+
+⚠️ RÈGLES STRICTES D'ÉCRITURE DES FORMULES :
+
+1. Toutes les formules mathématiques doivent être écrites en LaTeX valide.
+2. Les formules en ligne doivent être écrites avec : \( ... \)
+3. Les formules importantes doivent être écrites seules sur une ligne avec :
+
+\[ ... \]
+
+4. Ne JAMAIS écrire de formule mathématique :
+   - dans une liste numérotée (1. 2. 3.)
+   - sur la même ligne qu’un numéro
+   - collée à du texte sans retour à la ligne
+
+5. Toujours laisser :
+   - une ligne vide AVANT une formule en bloc
+   - une ligne vide APRÈS une formule en bloc
+
+6. Exemple CORRECT :
+
+Voici deux fractions :
+
+\[
+\frac{a}{b}
+\]
+
+et
+
+\[
+\frac{c}{d}
+\]
+
+7. Exemple INTERDIT :
+
+1. On a \(\frac{a}{b}\) et \(\frac{c}{d}\)
+2. \(\frac{a}{b} \div \frac{c}{d}\)
+
+8. N’utilise JAMAIS de bloc ```latex```.
 
 Voici le document de l'élève :
 """
@@ -258,3 +292,4 @@ with col_chat:
         st.markdown("**🤖 Assistant :**")
         st.markdown(fix_latex_for_streamlit(msg["answer"]))
         st.markdown("---")
+
