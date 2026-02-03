@@ -75,18 +75,12 @@ def text_to_image(text, width=600):
 # ✅ CORRECTION LATEX STREAMLIT — DÉFINITIVE
 # ======================
 def fix_latex_for_streamlit(text: str) -> str:
-    # 🔧 Réparer les formules cassées par retours ligne (PDF/Word)
     text = re.sub(r"I\s*\n\s*0", r"I_0", text)
     text = re.sub(r"10\s*\n\s*-\s*12", r"10^{-12}", text)
     text = re.sub(r"W\s*/\s*m\s*2", r"\\text{W/m}^2", text)
-
-    # 1. \[ ... \] → $$ ... $$
     text = re.sub(r"\\\[(.*?)\\\]", r"$$\1$$", text, flags=re.S)
-
-    # 2. \( ... \) → $ ... $
     text = re.sub(r"\\\((.*?)\\\)", r"$\1$", text, flags=re.S)
 
-    # 3. Lignes mathématiques complètes sans délimiteurs
     lines = text.split("\n")
     fixed_lines = []
 
@@ -97,14 +91,12 @@ def fix_latex_for_streamlit(text: str) -> str:
             and any(cmd in stripped for cmd in ["\\sqrt", "\\frac", "\\log"])
             and "=" in stripped
         )
-
         if is_math_line and not stripped.startswith("$"):
             fixed_lines.append(f"$$\n{stripped}\n$$")
         else:
             fixed_lines.append(line)
 
-    text = "\n".join(fixed_lines)
-    return text
+    return "\n".join(fixed_lines)
 
 # ======================
 # SESSION
@@ -137,7 +129,7 @@ if not st.session_state.connected:
     if st.button("Connexion"):
         active_users = clean_expired_sessions()
         if username in USERS and USERS[username] == password:
-            active_users = load_active_users()
+            # Vérification si le compte est déjà actif
             if username in active_users:
                 st.error("❌ Ce compte est déjà connecté sur un autre appareil.")
             else:
