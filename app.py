@@ -2,6 +2,7 @@ import streamlit as st
 import json
 import os
 import time
+import re
 from openai import OpenAI
 from PIL import Image, ImageDraw, ImageFont
 import io
@@ -69,6 +70,12 @@ def text_to_image(text, width=600):
         draw.text((10, y), line, fill="black", font=font)
         y += line_height
     return img
+
+# ✅ CORRECTION LATEX STREAMLIT (DÉFINITIVE)
+def fix_latex_for_streamlit(text: str) -> str:
+    text = re.sub(r"\\\[(.*?)\\\]", r"$$\1$$", text, flags=re.S)
+    text = re.sub(r"\\\((.*?)\\\)", r"$\1$", text, flags=re.S)
+    return text
 
 # ======================
 # SESSION
@@ -195,7 +202,7 @@ Maximum 100 mots.
                 messages=[{"role": "user", "content": prompt_rappel}]
             )
             st.markdown("**📚 Rappel de cours :**")
-            st.markdown(response.choices[0].message.content)
+            st.markdown(fix_latex_for_streamlit(response.choices[0].message.content))
 
 # ======================
 # CHAT
@@ -229,14 +236,9 @@ with col_chat:
         st.text_area("Ta question", key="question_input")
         st.form_submit_button("Envoyer", on_click=submit_question)
 
-    # 🔁 AFFICHAGE DU PLUS RÉCENT AU PLUS ANCIEN
     for msg in reversed(st.session_state.chat_history):
         st.markdown("**❓ Question :**")
         st.markdown(msg["question"])
         st.markdown("**🤖 Assistant :**")
-        st.markdown(msg["answer"])
+        st.markdown(fix_latex_for_streamlit(msg["answer"]))
         st.markdown("---")
-
-
-
-
