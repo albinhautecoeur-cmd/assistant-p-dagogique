@@ -23,7 +23,6 @@ Tu ne donnes jamais la réponse directement, tu guides progressivement l'élève
 Quand tu écris des formules mathématiques :
 - utilise \\( ... \\) pour les formules en ligne
 - utilise \\[ ... \\] pour les formules en bloc
-- n’utilise jamais de blocs de code LaTeX
 """
 
 USERS_FILE = "users.json"
@@ -54,28 +53,27 @@ def clean_expired_sessions():
     save_active_users(updated)
     return updated
 
-def text_to_image(text, width=600):
+def safe_text_to_image(text, max_lines=300, width=600):
+    lines = text.split("\n")[:max_lines]
     font = ImageFont.load_default()
-    lines = text.split("\n")
-    img = Image.new("RGB", (width, 20 + 15 * len(lines)), "white")
+    line_height = 14
+    height = 20 + line_height * len(lines)
+
+    img = Image.new("RGB", (width, height), "white")
     draw = ImageDraw.Draw(img)
+
     y = 10
     for line in lines:
-        draw.text((10, y), line, fill="black", font=font)
-        y += 15
+        draw.text((10, y), line[:120], fill="black", font=font)
+        y += line_height
+
     return img
 
 # ======================
-# ✅ RENDU LATEX STREAMLIT — VERSION SAINE
+# RENDU TEXTE + MATH (SÛR)
 # ======================
 def render_text_with_math(text: str):
-    """
-    Affiche le texte normalement
-    et toute expression mathématique en blocs $$...$$ séparés
-    """
-    lines = text.split("\n")
-
-    for line in lines:
+    for line in text.split("\n"):
         stripped = line.strip()
 
         is_math = (
@@ -98,10 +96,6 @@ if "username" not in st.session_state:
     st.session_state.username = None
 if "document_content" not in st.session_state:
     st.session_state.document_content = ""
-if "document_images" not in st.session_state:
-    st.session_state.document_images = []
-if "question_input" not in st.session_state:
-    st.session_state.question_input = ""
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
@@ -135,19 +129,36 @@ if not st.session_state.connected:
 # INTERFACE
 # ======================
 st.title("🧠 Mon Assistant pédagogique")
-
 col_doc, col_chat = st.columns([1, 2])
 
 # ======================
 # DOCUMENT
 # ======================
 with col_doc:
+    st.subheader("📄 Document de travail")
     uploaded_file = st.file_uploader("Dépose ton document", type=["txt", "docx", "pdf"])
 
     if uploaded_file:
-        content = uploaded_file.read().decode("utf-8", errors="ignore")
+        content = ""
+
+        if uploaded_file.name.endswith(".txt"):
+            content = uploaded_file.read().decode("utf-8", errors="ignore")
+            st.image(safe_text_to_image(content), use_column_width=True)
+
+        elif uploaded_file.name.endswith(".docx"):
+            doc = docx.Document(uploaded_file)
+            content = "\n".join(p.text for p in doc.paragraphs)
+            st.image(safe_text_to_image(content), use_column_width=True)
+
+        elif uploaded_file.name.endswith(".pdf"):
+            pdf = fitz.open(stream=uploaded_file.read(), filetype="pdf")
+            for page in pdf:
+                pix = page.get_pixmap(dpi=150)
+                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                st.image(img, use_column_width=True)
+                content += page.get_text()
+
         st.session_state.document_content = content
-        st.image(text_to_image(content), use_column_width=True)
 
 # ======================
 # CHAT
@@ -155,11 +166,19 @@ with col_doc:
 def submit_question():
     q = st.session_state.question_input
     if q:
-        prompt = PROMPT_PEDAGOGIQUE + "\n\n" + q
+        prompt = (
+            PROMPT_PEDAGOGIQUE
+            + "\n\nDOCUMENT:\n"
+            + st.session_state.document_content[:4000]
+            + "\n\nQUESTION:\n"
+            + q
+        )
+
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}]
         )
+
         st.session_state.chat_history.append(response.choices[0].message.content)
         st.session_state.question_input = ""
 
@@ -173,3 +192,4 @@ with col_chat:
     for answer in reversed(st.session_state.chat_history):
         render_text_with_math(answer)
         st.markdown("---")
+
