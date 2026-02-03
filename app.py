@@ -8,6 +8,7 @@ from PIL import Image, ImageDraw, ImageFont
 import io
 import docx
 import fitz  # PyMuPDF
+import pytesseract  # OCR pour lire les images
 
 # ======================
 # CONFIG
@@ -71,22 +72,25 @@ def text_to_image(text, width=600):
         y += line_height
     return img
 
+def ocr_image(image: Image.Image) -> str:
+    """Extrait le texte d'une image avec pytesseract"""
+    try:
+        text = pytesseract.image_to_string(image, lang="fra")
+        return text.strip()
+    except Exception:
+        return ""
+
 # ======================
 # ✅ CORRECTION LATEX STREAMLIT — DÉFINITIVE
 # ======================
 def fix_latex_for_streamlit(text: str) -> str:
-    # 🔧 Réparer les formules cassées par retours ligne (PDF/Word)
     text = re.sub(r"I\s*\n\s*0", r"I_0", text)
     text = re.sub(r"10\s*\n\s*-\s*12", r"10^{-12}", text)
     text = re.sub(r"W\s*/\s*m\s*2", r"\\text{W/m}^2", text)
 
-    # 1. \[ ... \] → $$ ... $$
     text = re.sub(r"\\\[(.*?)\\\]", r"$$\1$$", text, flags=re.S)
-
-    # 2. \( ... \) → $ ... $
     text = re.sub(r"\\\((.*?)\\\)", r"$\1$", text, flags=re.S)
 
-    # 3. Lignes mathématiques complètes sans délimiteurs
     lines = text.split("\n")
     fixed_lines = []
 
@@ -130,7 +134,6 @@ active_users = clean_expired_sessions()
 # ======================
 if not st.session_state.connected:
     st.title("🔐 Connexion élève")
-
     username = st.text_input("Identifiant")
     password = st.text_input("Mot de passe", type="password")
 
@@ -160,7 +163,6 @@ if st.button("🚪 Déconnexion"):
     if st.session_state.username in active_users:
         del active_users[st.session_state.username]
         save_active_users(active_users)
-
     st.session_state.connected = False
     st.session_state.username = None
     st.session_state.document_content = ""
@@ -176,16 +178,18 @@ col_doc, col_chat = st.columns([1, 2])
 # ======================
 with col_doc:
     st.subheader("📄 Document de travail")
-    uploaded_file = st.file_uploader("Dépose ton document", type=["txt", "docx", "pdf"])
+    uploaded_file = st.file_uploader("Dépose ton document", type=["txt", "docx", "pdf", "png", "jpg", "jpeg"])
 
     if uploaded_file:
         content = ""
         images = []
 
+        # TXT
         if uploaded_file.name.endswith(".txt"):
             content = uploaded_file.read().decode("utf-8")
             images = [text_to_image(content)]
 
+        # DOCX
         elif uploaded_file.name.endswith(".docx"):
             doc = docx.Document(uploaded_file)
             content = "\n".join([p.text for p in doc.paragraphs])
@@ -197,7 +201,9 @@ with col_doc:
                     img = Image.open(io.BytesIO(image_data))
                     img.thumbnail((600, 800))
                     images.append(img)
+                    content += "\n" + ocr_image(img)
 
+        # PDF
         elif uploaded_file.name.endswith(".pdf"):
             pdf_bytes = uploaded_file.read()
             pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
@@ -207,6 +213,14 @@ with col_doc:
                 img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
                 img.thumbnail((600, 800))
                 images.append(img)
+                content += "\n" + ocr_image(img)
+
+        # Image seule
+        elif uploaded_file.name.lower().endswith((".png", ".jpg", ".jpeg")):
+            img = Image.open(uploaded_file)
+            img.thumbnail((600, 800))
+            images.append(img)
+            content += "\n" + ocr_image(img)
 
         st.session_state.document_content = content
         st.session_state.document_images = images
@@ -241,25 +255,20 @@ def submit_question():
             + "\n\nQUESTION:\n"
             + q
         )
-
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}]
         )
-
         st.session_state.chat_history.append(
             {"question": q, "answer": response.choices[0].message.content}
         )
-
         st.session_state.question_input = ""
 
 with col_chat:
     st.subheader("💬 Chat pédagogique")
-
     with st.form("chat_form"):
         st.text_area("Ta question", key="question_input")
         st.form_submit_button("Envoyer", on_click=submit_question)
-
     for msg in reversed(st.session_state.chat_history):
         st.markdown("**❓ Question :**")
         st.markdown(msg["question"])
