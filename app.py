@@ -71,11 +71,35 @@ def text_to_image(text, width=600):
         y += line_height
     return img
 
-# ✅ CORRECTION LATEX STREAMLIT (DÉFINITIVE)
+# ======================
+# ✅ CORRECTION LATEX DÉFINITIVE STREAMLIT
+# ======================
 def fix_latex_for_streamlit(text: str) -> str:
+    # 1. \[ ... \] → $$ ... $$
     text = re.sub(r"\\\[(.*?)\\\]", r"$$\1$$", text, flags=re.S)
+
+    # 2. \( ... \) → $ ... $
     text = re.sub(r"\\\((.*?)\\\)", r"$\1$", text, flags=re.S)
-    return text
+
+    # 3. Détection de lignes LaTeX brutes
+    lines = text.split("\n")
+    fixed_lines = []
+
+    for line in lines:
+        stripped = line.strip()
+
+        is_math = (
+            "\\" in stripped and
+            any(cmd in stripped for cmd in ["\\sqrt", "\\frac", "^", "_"]) and
+            "=" in stripped
+        )
+
+        if is_math and not stripped.startswith("$"):
+            fixed_lines.append(f"$$\n{stripped}\n$$")
+        else:
+            fixed_lines.append(line)
+
+    return "\n".join(fixed_lines)
 
 # ======================
 # SESSION
@@ -192,14 +216,9 @@ with col_chat:
 
     if st.button("Obtenir le rappel"):
         if mots_cles:
-            prompt_rappel = f"""
-Tu es un assistant pédagogique bienveillant.
-Fais un rappel de cours clair basé sur ces mots-clés : {mots_cles}
-Maximum 100 mots.
-"""
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt_rappel}]
+                messages=[{"role": "user", "content": mots_cles}]
             )
             st.markdown("**📚 Rappel de cours :**")
             st.markdown(fix_latex_for_streamlit(response.choices[0].message.content))
