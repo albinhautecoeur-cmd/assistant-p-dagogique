@@ -75,6 +75,10 @@ def text_to_image(text, width=600):
 # ✅ CORRECTION LATEX STREAMLIT — DÉFINITIVE
 # ======================
 def fix_latex_for_streamlit(text: str) -> str:
+    # 0. Sécuriser \text{} et \,
+    text = text.replace(r"\text", r"\\text")
+    text = text.replace(r"\,", r"\\,")
+
     # 1. \[ ... \] → $$ ... $$
     text = re.sub(r"\\\[(.*?)\\\]", r"$$\1$$", text, flags=re.S)
 
@@ -99,8 +103,6 @@ def fix_latex_for_streamlit(text: str) -> str:
             fixed_lines.append(line)
 
     text = "\n".join(fixed_lines)
-
-    # ❌ NE PAS encapsuler les commandes LaTeX individuellement
     return text
 
 # ======================
