@@ -2,7 +2,6 @@ import streamlit as st
 import json
 import os
 import time
-import re
 from openai import OpenAI
 from PIL import Image, ImageDraw, ImageFont
 import io
@@ -70,9 +69,13 @@ def safe_text_to_image(text, max_lines=300, width=600):
     return img
 
 # ======================
-# RENDU TEXTE + MATH (SÛR)
+# RENDU TEXTE + MATH (SAFE)
 # ======================
-def render_text_with_math(text: str):
+def render_text_with_math(text):
+    if not isinstance(text, str):
+        st.warning("⚠️ Réponse invalide reçue.")
+        return
+
     for line in text.split("\n"):
         stripped = line.strip()
 
@@ -179,7 +182,11 @@ def submit_question():
             messages=[{"role": "user", "content": prompt}]
         )
 
-        st.session_state.chat_history.append(response.choices[0].message.content)
+        answer = response.choices[0].message.content
+        if not isinstance(answer, str):
+            answer = ""
+
+        st.session_state.chat_history.append(answer)
         st.session_state.question_input = ""
 
 with col_chat:
@@ -192,4 +199,3 @@ with col_chat:
     for answer in reversed(st.session_state.chat_history):
         render_text_with_math(answer)
         st.markdown("---")
-
