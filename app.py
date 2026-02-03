@@ -8,6 +8,9 @@ from PIL import Image, ImageDraw, ImageFont
 import io
 import docx
 import fitz  # PyMuPDF
+from streamlit_webrtc import webrtc_streamer, WebRtcMode
+import tempfile
+import soundfile as sf
 
 # ======================
 # CONFIG
@@ -18,8 +21,9 @@ client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 PROMPT_PEDAGOGIQUE = """
 Tu es un assistant pédagogique bienveillant.
 Explique clairement, simplement, avec des exemples si nécessaire.
-Ne dépasse pas 60 mots que ce soit pour les rappels ou pour la réponse chat.
+Ne dépasse pas 60 mots.
 Tu ne donnes jamais la réponse directement, tu guides progressivement l'élève.
+
 Quand tu écris des formules mathématiques :
 - utilise \( ... \) pour les formules en ligne
 - utilise \[ ... \] pour les formules en bloc
@@ -72,39 +76,35 @@ def text_to_image(text, width=600):
     return img
 
 # ======================
-# ✅ CORRECTION LATEX STREAMLIT — DÉFINITIVE
+# ✅ CORRECTION LATEX STREAMLIT
 # ======================
 def fix_latex_for_streamlit(text: str) -> str:
-    # 🔧 Réparer les formules cassées par retours ligne (PDF/Word)
+    # Corriger retours ligne PDF
     text = re.sub(r"I\s*\n\s*0", r"I_0", text)
     text = re.sub(r"10\s*\n\s*-\s*12", r"10^{-12}", text)
     text = re.sub(r"W\s*/\s*m\s*2", r"\\text{W/m}^2", text)
 
-    # 1. \[ ... \] → $$ ... $$
+    # \[ ... \] → $$ ... $$
     text = re.sub(r"\\\[(.*?)\\\]", r"$$\1$$", text, flags=re.S)
 
-    # 2. \( ... \) → $ ... $
+    # \( ... \) → $ ... $
     text = re.sub(r"\\\((.*?)\\\)", r"$\1$", text, flags=re.S)
 
-    # 3. Lignes mathématiques complètes sans délimiteurs
+    # Lignes mathématiques complètes → $$ ... $$
     lines = text.split("\n")
     fixed_lines = []
 
     for line in lines:
         stripped = line.strip()
-        is_math_line = (
-            "\\" in stripped
-            and any(cmd in stripped for cmd in ["\\sqrt", "\\frac", "\\log"])
-            and "=" in stripped
-        )
-
-        if is_math_line and not stripped.startswith("$"):
-            fixed_lines.append(f"$$\n{stripped}\n$$")
+        math_cmds = ["\\sqrt", "\\frac", "\\log", "\\div", "\\times", "\\cdot", "\\sum", "\\int"]
+        if any(cmd in stripped for cmd in math_cmds) and "=" in stripped:
+            fixed_lines.append("")  # ligne vide avant
+            fixed_lines.append(f"$${stripped}$$")
+            fixed_lines.append("")  # ligne vide après
         else:
             fixed_lines.append(line)
 
-    text = "\n".join(fixed_lines)
-    return text
+    return "\n".join(fixed_lines)
 
 # ======================
 # SESSION
@@ -130,7 +130,6 @@ active_users = clean_expired_sessions()
 # ======================
 if not st.session_state.connected:
     st.title("🔐 Connexion élève")
-
     username = st.text_input("Identifiant")
     password = st.text_input("Mot de passe", type="password")
 
@@ -229,37 +228,56 @@ with col_chat:
             st.markdown(fix_latex_for_streamlit(response.choices[0].message.content))
 
 # ======================
-# CHAT
+# CHAT + RECONNAISSANCE VOCALE
 # ======================
 def submit_question():
     q = st.session_state.question_input
     if q:
-        prompt = (
-            PROMPT_PEDAGOGIQUE
-            + "\n\nDOCUMENT:\n"
-            + st.session_state.document_content
-            + "\n\nQUESTION:\n"
-            + q
-        )
-
+        prompt = PROMPT_PEDAGOGIQUE + "\n\nDOCUMENT:\n" + st.session_state.document_content + "\n\nQUESTION:\n" + q
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}]
         )
-
         st.session_state.chat_history.append(
             {"question": q, "answer": response.choices[0].message.content}
         )
-
         st.session_state.question_input = ""
 
 with col_chat:
-    st.subheader("💬 Chat pédagogique")
+    st.subheader("💬 Chat pédagogique (texte ou voix)")
 
+    # --- Reconnaissance vocale ---
+    if st.checkbox("🎤 Utiliser la reconnaissance vocale"):
+        webrtc_ctx = webrtc_streamer(
+            key="speech-to-text",
+            mode=WebRtcMode.SENDONLY,
+            audio_receiver_size=1024,
+            media_stream_constraints={"audio": True, "video": False}
+        )
+
+        if webrtc_ctx.audio_receiver:
+            audio_frames = webrtc_ctx.audio_receiver.get_frames(timeout=1)
+            if audio_frames:
+                audio_data = b"".join([f.to_bytes() for f in audio_frames])
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                    tmp.write(audio_data)
+                    tmp_path = tmp.name
+
+                audio_file = open(tmp_path, "rb")
+                transcript = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file
+                )
+                audio_file.close()
+                st.session_state.question_input = transcript.text
+                st.success(f"Texte reconnu : {transcript.text}")
+
+    # --- Formulaire texte ---
     with st.form("chat_form"):
         st.text_area("Ta question", key="question_input")
         st.form_submit_button("Envoyer", on_click=submit_question)
 
+    # --- Historique ---
     for msg in reversed(st.session_state.chat_history):
         st.markdown("**❓ Question :**")
         st.markdown(msg["question"])
