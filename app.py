@@ -8,7 +8,6 @@ from PIL import Image, ImageDraw, ImageFont
 import io
 import docx
 import fitz  # PyMuPDF
-import base64  # Pour convertir les images en base64
 
 # ======================
 # CONFIG
@@ -76,12 +75,18 @@ def text_to_image(text, width=600):
 # ✅ CORRECTION LATEX STREAMLIT — DÉFINITIVE
 # ======================
 def fix_latex_for_streamlit(text: str) -> str:
+    # 🔧 Réparer les formules cassées par retours ligne (PDF/Word)
     text = re.sub(r"I\s*\n\s*0", r"I_0", text)
     text = re.sub(r"10\s*\n\s*-\s*12", r"10^{-12}", text)
     text = re.sub(r"W\s*/\s*m\s*2", r"\\text{W/m}^2", text)
+
+    # 1. \[ ... \] → $$ ... $$
     text = re.sub(r"\\\[(.*?)\\\]", r"$$\1$$", text, flags=re.S)
+
+    # 2. \( ... \) → $ ... $
     text = re.sub(r"\\\((.*?)\\\)", r"$\1$", text, flags=re.S)
 
+    # 3. Lignes mathématiques complètes sans délimiteurs
     lines = text.split("\n")
     fixed_lines = []
 
@@ -92,29 +97,14 @@ def fix_latex_for_streamlit(text: str) -> str:
             and any(cmd in stripped for cmd in ["\\sqrt", "\\frac", "\\log"])
             and "=" in stripped
         )
+
         if is_math_line and not stripped.startswith("$"):
             fixed_lines.append(f"$$\n{stripped}\n$$")
         else:
             fixed_lines.append(line)
 
-    return "\n".join(fixed_lines)
-
-# ======================
-# OCR IMAGE VIA OPENAI
-# ======================
-def ocr_image_via_openai(img: Image.Image) -> str:
-    buffered = io.BytesIO()
-    img.save(buffered, format="PNG")
-    img_b64 = base64.b64encode(buffered.getvalue()).decode()
-
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{
-            "role": "user",
-            "content": f"Lis et extrais le texte de cette image (PNG en base64) : {img_b64}"
-        }]
-    )
-    return response.choices[0].message.content
+    text = "\n".join(fixed_lines)
+    return text
 
 # ======================
 # SESSION
@@ -186,7 +176,7 @@ col_doc, col_chat = st.columns([1, 2])
 # ======================
 with col_doc:
     st.subheader("📄 Document de travail")
-    uploaded_file = st.file_uploader("Dépose ton document", type=["txt", "docx", "pdf", "png", "jpg", "jpeg"])
+    uploaded_file = st.file_uploader("Dépose ton document", type=["txt", "docx", "pdf"])
 
     if uploaded_file:
         content = ""
@@ -217,13 +207,6 @@ with col_doc:
                 img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
                 img.thumbnail((600, 800))
                 images.append(img)
-
-        elif uploaded_file.name.lower().endswith((".png", ".jpg", ".jpeg")):
-            img = Image.open(uploaded_file)
-            img.thumbnail((600, 800))
-            images.append(img)
-            # OCR via OpenAI
-            content += ocr_image_via_openai(img)
 
         st.session_state.document_content = content
         st.session_state.document_images = images
