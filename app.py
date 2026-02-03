@@ -19,6 +19,11 @@ Tu es un assistant pédagogique bienveillant.
 Explique clairement, simplement, avec des exemples si nécessaire.
 Ne dépasse pas 60 mots.
 Tu ne donnes jamais la réponse directement, tu guides progressivement l'élève.
+Quand tu écris des formules mathématiques :
+- utilise \( ... \) pour les formules en ligne
+- utilise \[ ... \] pour les formules en bloc
+- n’utilise jamais de blocs de code LaTeX
+
 Voici le document de l'élève :
 """
 
@@ -231,6 +236,7 @@ with col_chat:
         st.markdown("**🤖 Assistant :**")
         st.markdown(msg["answer"])
         st.markdown("---")
+
 
 
 
