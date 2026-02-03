@@ -8,9 +8,6 @@ from PIL import Image, ImageDraw, ImageFont
 import io
 import docx
 import fitz  # PyMuPDF
-import speech_recognition as sr
-from tempfile import NamedTemporaryFile
-from pydub import AudioSegment
 
 # ======================
 # CONFIG
@@ -256,50 +253,13 @@ def submit_question():
 
         st.session_state.question_input = ""
 
-
-# ======================
-# VOICE INPUT
-# ======================
-def record_audio_and_transcribe():
-    st.info("🎙️ Enregistrement vocal… Parle maintenant !")
-    uploaded_audio = st.file_uploader("Ou charge un fichier audio (wav/mp3)", type=["wav", "mp3"])
-    if uploaded_audio:
-        with NamedTemporaryFile(delete=False) as tmp:
-            tmp.write(uploaded_audio.read())
-            tmp_path = tmp.name
-
-        # Convertir en wav si nécessaire
-        if uploaded_audio.name.endswith(".mp3"):
-            sound = AudioSegment.from_mp3(tmp_path)
-            tmp_wav = tmp_path + ".wav"
-            sound.export(tmp_wav, format="wav")
-            tmp_path = tmp_wav
-
-        recognizer = sr.Recognizer()
-        with sr.AudioFile(tmp_path) as source:
-            audio_data = recognizer.record(source)
-            try:
-                text = recognizer.recognize_google(audio_data, language="fr-FR")
-                st.session_state.question_input = text
-                st.success(f"🎤 Transcription : {text}")
-            except sr.UnknownValueError:
-                st.error("❌ Impossible de transcrire l'audio.")
-            except sr.RequestError as e:
-                st.error(f"Erreur service Google Speech : {e}")
-
-
 with col_chat:
     st.subheader("💬 Chat pédagogique")
 
-    # --- Zone textuelle
     with st.form("chat_form"):
         st.text_area("Ta question", key="question_input")
         st.form_submit_button("Envoyer", on_click=submit_question)
 
-    # --- Voice input
-    record_audio_and_transcribe()
-
-    # --- Affichage du chat
     for msg in reversed(st.session_state.chat_history):
         st.markdown("**❓ Question :**")
         st.markdown(msg["question"])
