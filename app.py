@@ -89,7 +89,7 @@ def fix_latex_for_streamlit(text: str) -> str:
         stripped = line.strip()
         is_math_line = (
             "\\" in stripped
-            and any(cmd in stripped for cmd in ["\\sqrt", "\\frac", "^", "_"])
+            and any(cmd in stripped for cmd in ["\\sqrt", "\\frac", "\\log"])
             and "=" in stripped
         )
 
@@ -100,17 +100,7 @@ def fix_latex_for_streamlit(text: str) -> str:
 
     text = "\n".join(fixed_lines)
 
-    # 4. ✅ COMMANDES LATEX INLINE DANS LE TEXTE (ex: \vec{E})
-    def wrap_inline(match):
-        expr = match.group(0)
-        return f"${expr}$"
-
-    text = re.sub(
-        r"(?<!\$)(\\[a-zA-Z]+(\{[^}]+\})?)(?!\$)",
-        wrap_inline,
-        text
-    )
-
+    # ❌ NE PAS encapsuler les commandes LaTeX individuellement
     return text
 
 # ======================
@@ -273,4 +263,3 @@ with col_chat:
         st.markdown("**🤖 Assistant :**")
         st.markdown(fix_latex_for_streamlit(msg["answer"]))
         st.markdown("---")
-
