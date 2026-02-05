@@ -12,7 +12,42 @@ import fitz  # PyMuPDF
 # ======================
 # CONFIG
 # ======================
-st.set_page_config(page_title="BiNo", layout="wide")
+st.set_page_config(page_title="Assistant pédagogique", layout="wide")
+
+# 🎨 STYLE GLOBAL
+st.markdown("""
+<style>
+.stApp {
+    background-color: #eaf3ff;
+}
+h1, h2, h3 {
+    color: #1f3c88;
+}
+.stButton>button {
+    background: linear-gradient(135deg, #7aa2ff, #a5c9ff);
+    color: white;
+    border-radius: 20px;
+    padding: 0.5em 1.2em;
+    border: none;
+    font-weight: bold;
+    transition: 0.2s ease;
+}
+.stButton>button:hover {
+    transform: scale(1.05);
+    background: linear-gradient(135deg, #5f8dff, #8fb8ff);
+}
+.stTextInput>div>div>input,
+.stTextArea textarea {
+    border-radius: 15px;
+    border: 1px solid #aac4ff;
+    background-color: #f5f9ff;
+}
+.block-container {
+    padding-top: 2rem;
+}
+</style>
+""", unsafe_allow_html=True)
+
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 PROMPT_PEDAGOGIQUE = """
@@ -22,7 +57,7 @@ Ne dépasse pas 60 mots que ce soit pour les rappels ou pour la réponse chat.
 Tu ne donnes jamais la réponse directement, tu guides progressivement l'élève.
 Quand tu écris des formules mathématiques :
 - utilise \( ... \) pour les formules en ligne
-- utilise \[ ... \) pour les formules en bloc
+- utilise \[ ... \] pour les formules en bloc
 - n’utilise jamais de blocs de code LaTeX
 
 Voici le document de l'élève :
@@ -36,8 +71,6 @@ SESSION_TIMEOUT = 60
 # UTILITAIRES
 # ======================
 def load_users():
-    if not os.path.exists(USERS_FILE):
-        return {}
     with open(USERS_FILE, "r") as f:
         return json.load(f)
 
@@ -74,7 +107,7 @@ def text_to_image(text, width=600):
     return img
 
 # ======================
-# ✅ CORRECTION LATEX STREAMLIT — DÉFINITIVE
+# FIX LATEX
 # ======================
 def fix_latex_for_streamlit(text: str) -> str:
     text = re.sub(r"I\s*\n\s*0", r"I_0", text)
@@ -94,14 +127,12 @@ def fix_latex_for_streamlit(text: str) -> str:
             and any(cmd in stripped for cmd in ["\\sqrt", "\\frac", "\\log"])
             and "=" in stripped
         )
-
         if is_math_line and not stripped.startswith("$"):
             fixed_lines.append(f"$$\n{stripped}\n$$")
         else:
             fixed_lines.append(line)
 
-    text = "\n".join(fixed_lines)
-    return text
+    return "\n".join(fixed_lines)
 
 # ======================
 # SESSION
@@ -126,25 +157,28 @@ active_users = clean_expired_sessions()
 # LOGIN
 # ======================
 if not st.session_state.connected:
-    st.title("🔐 Connexion élève")
+    st.markdown("""
+    <div style="text-align:center;">
+        <h1>🧠 BiNo</h1>
+        <h3>Connexion élève</h3>
+    </div>
+    """, unsafe_allow_html=True)
 
     username = st.text_input("Identifiant")
     password = st.text_input("Mot de passe", type="password")
 
     if st.button("Connexion"):
         active_users = clean_expired_sessions()
-        if username in USERS:
-            if USERS[username] == password:
-                if username in active_users:
-                    st.error("❌ Ce compte est déjà connecté sur un autre appareil.")
-                else:
-                    active_users[username] = time.time()
-                    save_active_users(active_users)
-                    st.session_state.connected = True
-                    st.session_state.username = username
-                    st.success("Connexion réussie")
+        if username in USERS and USERS[username] == password:
+            active_users = load_active_users()
+            if username in active_users:
+                st.error("❌ Ce compte est déjà connecté sur un autre appareil.")
             else:
-                st.error("Identifiant ou mot de passe incorrect")
+                active_users[username] = time.time()
+                save_active_users(active_users)
+                st.session_state.connected = True
+                st.session_state.username = username
+                st.success("Connexion réussie")
         else:
             st.error("Identifiant ou mot de passe incorrect")
     st.stop()
@@ -152,7 +186,15 @@ if not st.session_state.connected:
 # ======================
 # INTERFACE
 # ======================
-st.title("🧠 BiNo")
+st.markdown("""
+<div style="display:flex; align-items:center; gap:15px;">
+    <div style="font-size:60px;">🧠</div>
+    <div>
+        <h1 style="margin-bottom:0;">BiNo</h1>
+        <h3 style="margin-top:0;">Assistant pédagogique</h3>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 if st.button("🚪 Déconnexion"):
     active_users = load_active_users()
@@ -168,12 +210,13 @@ if st.button("🚪 Déconnexion"):
     st.experimental_set_query_params()
     st.stop()
 
-col_doc, col_chat = st.columns([1, 2])
+col_doc, col_chat = st.columns([1, 2], gap="large")
 
 # ======================
 # DOCUMENT
 # ======================
 with col_doc:
+    st.markdown('<div style="background:white; padding:15px; border-radius:20px;">', unsafe_allow_html=True)
     st.subheader("📄 Document de travail")
     uploaded_file = st.file_uploader("Dépose ton document", type=["txt", "docx", "pdf"])
 
@@ -210,13 +253,16 @@ with col_doc:
         st.session_state.document_content = content
         st.session_state.document_images = images
         st.image(images, use_column_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ======================
-# RAPPEL
+# RAPPEL + CHAT
 # ======================
 with col_chat:
+    st.markdown('<div style="background:white; padding:15px; border-radius:20px;">', unsafe_allow_html=True)
+
     st.subheader("📝 Rappel de cours")
-    mots_cles = st.text_input("Ne mets ici que des Mots-clés, c'est suffisant")
+    mots_cles = st.text_input("Ne mets ici que des mots-clés")
 
     if st.button("Obtenir le rappel"):
         if mots_cles:
@@ -227,33 +273,20 @@ with col_chat:
             st.markdown("**📚 Rappel de cours :**")
             st.markdown(fix_latex_for_streamlit(response.choices[0].message.content))
 
-# ======================
-# CHAT
-# ======================
-def submit_question():
-    q = st.session_state.question_input
-    if q:
-        prompt = (
-            PROMPT_PEDAGOGIQUE
-            + "\n\nDOCUMENT:\n"
-            + st.session_state.document_content
-            + "\n\nQUESTION:\n"
-            + q
-        )
-
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}]
-        )
-
-        st.session_state.chat_history.append(
-            {"question": q, "answer": response.choices[0].message.content}
-        )
-
-        st.session_state.question_input = ""
-
-with col_chat:
     st.subheader("💬 Chat pédagogique")
+
+    def submit_question():
+        q = st.session_state.question_input
+        if q:
+            prompt = PROMPT_PEDAGOGIQUE + "\n\nDOCUMENT:\n" + st.session_state.document_content + "\n\nQUESTION:\n" + q
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}]
+            )
+            st.session_state.chat_history.append(
+                {"question": q, "answer": response.choices[0].message.content}
+            )
+            st.session_state.question_input = ""
 
     with st.form("chat_form"):
         st.text_area("Ta question", key="question_input")
@@ -266,4 +299,4 @@ with col_chat:
         st.markdown(fix_latex_for_streamlit(msg["answer"]))
         st.markdown("---")
 
-
+    st.markdown('</div>', unsafe_allow_html=True)
