@@ -14,7 +14,7 @@ import fitz  # PyMuPDF
 # ======================
 st.set_page_config(page_title="Assistant pédagogique", layout="wide")
 
-# 🎨 STYLE GLOBAL
+# 🎨 STYLE PASTEL
 st.markdown("""
 <style>
 .stApp {
@@ -30,20 +30,12 @@ h1, h2, h3 {
     padding: 0.5em 1.2em;
     border: none;
     font-weight: bold;
-    transition: 0.2s ease;
-}
-.stButton>button:hover {
-    transform: scale(1.05);
-    background: linear-gradient(135deg, #5f8dff, #8fb8ff);
 }
 .stTextInput>div>div>input,
 .stTextArea textarea {
     border-radius: 15px;
     border: 1px solid #aac4ff;
     background-color: #f5f9ff;
-}
-.block-container {
-    padding-top: 2rem;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -117,22 +109,7 @@ def fix_latex_for_streamlit(text: str) -> str:
     text = re.sub(r"\\\[(.*?)\\\]", r"$$\1$$", text, flags=re.S)
     text = re.sub(r"\\\((.*?)\\\)", r"$\1$", text, flags=re.S)
 
-    lines = text.split("\n")
-    fixed_lines = []
-
-    for line in lines:
-        stripped = line.strip()
-        is_math_line = (
-            "\\" in stripped
-            and any(cmd in stripped for cmd in ["\\sqrt", "\\frac", "\\log"])
-            and "=" in stripped
-        )
-        if is_math_line and not stripped.startswith("$"):
-            fixed_lines.append(f"$$\n{stripped}\n$$")
-        else:
-            fixed_lines.append(line)
-
-    return "\n".join(fixed_lines)
+    return text
 
 # ======================
 # SESSION
@@ -157,12 +134,7 @@ active_users = clean_expired_sessions()
 # LOGIN
 # ======================
 if not st.session_state.connected:
-    st.markdown("""
-    <div style="text-align:center;">
-        <h1>🧠 BiNo</h1>
-        <h3>Connexion élève</h3>
-    </div>
-    """, unsafe_allow_html=True)
+    st.title("🔐 Connexion élève")
 
     username = st.text_input("Identifiant")
     password = st.text_input("Mot de passe", type="password")
@@ -170,7 +142,6 @@ if not st.session_state.connected:
     if st.button("Connexion"):
         active_users = clean_expired_sessions()
         if username in USERS and USERS[username] == password:
-            active_users = load_active_users()
             if username in active_users:
                 st.error("❌ Ce compte est déjà connecté sur un autre appareil.")
             else:
@@ -183,18 +154,15 @@ if not st.session_state.connected:
             st.error("Identifiant ou mot de passe incorrect")
     st.stop()
 
+# 🔁 MAJ SESSION ACTIVE (ANTI DOUBLE CONNEXION)
+active_users = load_active_users()
+active_users[st.session_state.username] = time.time()
+save_active_users(active_users)
+
 # ======================
 # INTERFACE
 # ======================
-st.markdown("""
-<div style="display:flex; align-items:center; gap:15px;">
-    <div style="font-size:60px;">🧠</div>
-    <div>
-        <h1 style="margin-bottom:0;">BiNo</h1>
-        <h3 style="margin-top:0;">Assistant pédagogique</h3>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+st.title("🧠 Mon Assistant pédagogique")
 
 if st.button("🚪 Déconnexion"):
     active_users = load_active_users()
@@ -207,18 +175,21 @@ if st.button("🚪 Déconnexion"):
     st.session_state.document_content = ""
     st.session_state.document_images = []
     st.session_state.chat_history = []
-    st.experimental_set_query_params()
     st.stop()
 
-col_doc, col_chat = st.columns([1, 2], gap="large")
+# ✅ MOITIÉ / MOITIÉ
+col_doc, col_chat = st.columns([1, 1])
 
 # ======================
 # DOCUMENT
 # ======================
 with col_doc:
-    st.markdown('<div style="background:white; padding:15px; border-radius:20px;">', unsafe_allow_html=True)
     st.subheader("📄 Document de travail")
-    uploaded_file = st.file_uploader("Dépose ton document", type=["txt", "docx", "pdf"])
+    uploaded_file = st.file_uploader(
+        "Dépose ton document",
+        type=["txt", "docx", "pdf"],
+        use_container_width=True
+    )
 
     if uploaded_file:
         content = ""
@@ -253,14 +224,11 @@ with col_doc:
         st.session_state.document_content = content
         st.session_state.document_images = images
         st.image(images, use_column_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
 
 # ======================
 # RAPPEL + CHAT
 # ======================
 with col_chat:
-    st.markdown('<div style="background:white; padding:15px; border-radius:20px;">', unsafe_allow_html=True)
-
     st.subheader("📝 Rappel de cours")
     mots_cles = st.text_input("Ne mets ici que des mots-clés")
 
@@ -298,5 +266,3 @@ with col_chat:
         st.markdown("**🤖 Assistant :**")
         st.markdown(fix_latex_for_streamlit(msg["answer"]))
         st.markdown("---")
-
-    st.markdown('</div>', unsafe_allow_html=True)
