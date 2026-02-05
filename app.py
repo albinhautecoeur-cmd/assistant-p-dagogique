@@ -152,7 +152,7 @@ if not st.session_state.connected:
 # ======================
 # INTERFACE
 # ======================
-st.title("🧠 Mon Assistant pédagogique")
+st.title("🧠 BiNo")
 
 if st.button("🚪 Déconnexion"):
     active_users = load_active_users()
@@ -265,4 +265,5 @@ with col_chat:
         st.markdown("**🤖 Assistant :**")
         st.markdown(fix_latex_for_streamlit(msg["answer"]))
         st.markdown("---")
+
 
