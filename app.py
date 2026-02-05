@@ -37,6 +37,9 @@ h1, h2, h3 {
     border: 1px solid #aac4ff;
     background-color: #f5f9ff;
 }
+.block-container {
+    padding-top: 2rem;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -105,11 +108,22 @@ def fix_latex_for_streamlit(text: str) -> str:
     text = re.sub(r"I\s*\n\s*0", r"I_0", text)
     text = re.sub(r"10\s*\n\s*-\s*12", r"10^{-12}", text)
     text = re.sub(r"W\s*/\s*m\s*2", r"\\text{W/m}^2", text)
-
     text = re.sub(r"\\\[(.*?)\\\]", r"$$\1$$", text, flags=re.S)
     text = re.sub(r"\\\((.*?)\\\)", r"$\1$", text, flags=re.S)
-
-    return text
+    lines = text.split("\n")
+    fixed_lines = []
+    for line in lines:
+        stripped = line.strip()
+        is_math_line = (
+            "\\" in stripped
+            and any(cmd in stripped for cmd in ["\\sqrt", "\\frac", "\\log"])
+            and "=" in stripped
+        )
+        if is_math_line and not stripped.startswith("$"):
+            fixed_lines.append(f"$$\n{stripped}\n$$")
+        else:
+            fixed_lines.append(line)
+    return "\n".join(fixed_lines)
 
 # ======================
 # SESSION
@@ -169,7 +183,6 @@ if st.button("🚪 Déconnexion"):
     if st.session_state.username in active_users:
         del active_users[st.session_state.username]
         save_active_users(active_users)
-
     st.session_state.connected = False
     st.session_state.username = None
     st.session_state.document_content = ""
@@ -177,7 +190,7 @@ if st.button("🚪 Déconnexion"):
     st.session_state.chat_history = []
     st.stop()
 
-# ✅ MOITIÉ / MOITIÉ
+# ✅ COLONNES 50/50
 col_doc, col_chat = st.columns([1, 1])
 
 # ======================
@@ -186,9 +199,7 @@ col_doc, col_chat = st.columns([1, 1])
 with col_doc:
     st.subheader("📄 Document de travail")
     uploaded_file = st.file_uploader(
-        "Dépose ton document",
-        type=["txt", "docx", "pdf"],
-        use_container_width=True
+        "Dépose ton document", type=["txt", "docx", "pdf"]
     )
 
     if uploaded_file:
