@@ -179,7 +179,7 @@ save_active_users(active_users)
 # ======================
 # INTERFACE
 # ======================
-st.title("🧠 Mon Assistant pédagogique")
+st.title("🧠 BiNo, mon Assistant Pédagogique")
 
 # ======================
 # DECONNEXION (1 clic)
@@ -284,3 +284,4 @@ with col_chat:
         st.markdown("**🤖 Assistant :**")
         st.markdown(fix_latex_for_streamlit(msg["answer"]))
         st.markdown("---")
+
