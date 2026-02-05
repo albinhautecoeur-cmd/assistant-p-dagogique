@@ -155,8 +155,8 @@ if not st.session_state.connected:
     with st.form("login_form"):
         username = st.text_input("Identifiant")
         password = st.text_input("Mot de passe", type="password")
-        submitted = st.form_submit_button("Connexion")
-        if submitted:
+        submitted_login = st.form_submit_button("Connexion")
+        if submitted_login:
             active_users = clean_expired_sessions()
             if username in USERS and USERS[username] == password:
                 if username in active_users:
@@ -184,17 +184,20 @@ st.title("🧠 Mon Assistant pédagogique")
 # ======================
 # DECONNEXION (1 clic)
 # ======================
-if st.button("🚪 Déconnexion"):
-    active_users = load_active_users()
-    if st.session_state.username in active_users:
-        del active_users[st.session_state.username]
-        save_active_users(active_users)
-    st.session_state.connected = False
-    st.session_state.username = None
-    st.session_state.document_content = ""
-    st.session_state.document_images = []
-    st.session_state.chat_history = []
-    st.experimental_rerun()
+with st.form("logout_form"):
+    submitted_logout = st.form_submit_button("🚪 Déconnexion")
+    if submitted_logout:
+        active_users = load_active_users()
+        if st.session_state.username in active_users:
+            del active_users[st.session_state.username]
+            save_active_users(active_users)
+        st.session_state.connected = False
+        st.session_state.username = None
+        st.session_state.document_content = ""
+        st.session_state.document_images = []
+        st.session_state.chat_history = []
+        st.experimental_set_query_params()
+        st.stop()
 
 # ✅ COLONNES 50/50
 col_doc, col_chat = st.columns([1, 1])
