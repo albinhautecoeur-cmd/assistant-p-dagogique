@@ -12,7 +12,7 @@ import fitz  # PyMuPDF
 # ======================
 # CONFIG
 # ======================
-st.set_page_config(page_title="Assistant pédagogique", layout="wide")
+st.set_page_config(page_title="BiNo", layout="wide")
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 PROMPT_PEDAGOGIQUE = """
@@ -265,3 +265,4 @@ with col_chat:
         st.markdown("**🤖 Assistant :**")
         st.markdown(fix_latex_for_streamlit(msg["answer"]))
         st.markdown("---")
+
