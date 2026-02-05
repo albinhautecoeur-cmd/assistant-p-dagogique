@@ -153,19 +153,19 @@ active_users = clean_expired_sessions()
 if not st.session_state.connected:
     st.title("🔐 Connexion élève")
     with st.form("login_form"):
-        username = st.text_input("Identifiant")
-        password = st.text_input("Mot de passe", type="password")
+        username_input = st.text_input("Identifiant")
+        password_input = st.text_input("Mot de passe", type="password")
         submitted_login = st.form_submit_button("Connexion")
         if submitted_login:
             active_users = clean_expired_sessions()
-            if username in USERS and USERS[username] == password:
-                if username in active_users:
+            if username_input in USERS and USERS[username_input] == password_input:
+                if username_input in active_users:
                     st.error("❌ Ce compte est déjà connecté sur un autre appareil.")
                 else:
-                    active_users[username] = time.time()
-                    save_active_users(active_users)
                     st.session_state.connected = True
-                    st.session_state.username = username
+                    st.session_state.username = username_input
+                    active_users[username_input] = time.time()
+                    save_active_users(active_users)
                     st.success("Connexion réussie")
             else:
                 st.error("Identifiant ou mot de passe incorrect")
@@ -196,7 +196,6 @@ with st.form("logout_form"):
         st.session_state.document_content = ""
         st.session_state.document_images = []
         st.session_state.chat_history = []
-        st.experimental_set_query_params()
         st.stop()
 
 # ✅ COLONNES 50/50
