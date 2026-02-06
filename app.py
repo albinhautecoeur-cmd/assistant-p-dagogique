@@ -215,10 +215,12 @@ if not st.session_state.connected:
                 st.error("Identifiant ou mot de passe incorrect")
     st.stop()
 
+# ======================
+# SESSION ACTIVE
+# ======================
 active_users = load_active_users()
 active_users[st.session_state.username] = time.time()
 save_active_users(active_users)
-
 etab = get_etablissement(st.session_state.username)
 
 # ======================
@@ -292,7 +294,6 @@ with col_chat:
             prompt_tokens = getattr(getattr(response, "usage", None), "prompt_tokens", count_tokens(mots_cles))
             completion_tokens = getattr(getattr(response, "usage", None), "completion_tokens", count_tokens(response.choices[0].message.content))
             add_tokens(etab, prompt_tokens, completion_tokens)
-
             st.markdown(fix_latex_for_streamlit(response.choices[0].message.content))
 
     st.subheader("💬 Chat pédagogique")
