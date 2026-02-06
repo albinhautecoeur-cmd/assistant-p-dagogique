@@ -71,7 +71,6 @@ Voici le document de l'élève :
 USERS_FILE = "users.json"
 ACTIVE_USERS_FILE = "active_users.json"
 TOKENS_FILE = "tokens.json"
-HISTORY_FILE = "tokens_history.json"
 SESSION_TIMEOUT = 60
 ADMIN_USER = "ahautecoeur2"
 
@@ -112,29 +111,6 @@ def load_tokens():
 def save_tokens(data):
     with open(TOKENS_FILE, "w") as f:
         json.dump(data, f, indent=2)
-
-# Historique complet
-def add_tokens_history(username, prompt_tokens, completion_tokens):
-    if not os.path.exists(HISTORY_FILE):
-        history = []
-    else:
-        with open(HISTORY_FILE, "r") as f:
-            history = json.load(f)
-
-    total_tokens = prompt_tokens + completion_tokens
-    cost = (total_tokens / 1000) * TOKEN_COST_PER_1K
-
-    history.append({
-        "timestamp": time.time(),
-        "user": username,
-        "prompt": prompt_tokens,
-        "completion": completion_tokens,
-        "total": total_tokens,
-        "cost": cost
-    })
-
-    with open(HISTORY_FILE, "w") as f:
-        json.dump(history, f, indent=2)
 
 # Mise à jour cumulée
 def add_tokens(username, prompt_tokens, completion_tokens):
@@ -307,7 +283,6 @@ with col_chat:
             prompt_tokens = count_tokens(mots_cles)
             completion_tokens = count_tokens(response.choices[0].message.content)
             add_tokens(st.session_state.username, prompt_tokens, completion_tokens)
-            add_tokens_history(st.session_state.username, prompt_tokens, completion_tokens)
 
             st.markdown("**📚 Rappel de cours :**")
             st.markdown(fix_latex_for_streamlit(response.choices[0].message.content))
@@ -326,7 +301,6 @@ with col_chat:
             prompt_tokens = count_tokens(prompt)
             completion_tokens = count_tokens(response.choices[0].message.content)
             add_tokens(st.session_state.username, prompt_tokens, completion_tokens)
-            add_tokens_history(st.session_state.username, prompt_tokens, completion_tokens)
 
             st.session_state.chat_history.append(
                 {"question": q, "answer": response.choices[0].message.content}
@@ -343,7 +317,7 @@ with col_chat:
         st.markdown("---")
 
 # ======================
-# ADMIN VIEW (totaux + historique)
+# ADMIN VIEW (CUMULS SEULS)
 # ======================
 if st.session_state.username == ADMIN_USER:
     st.subheader("📊 Tokens cumulés par utilisateur (ADMIN)")
@@ -353,15 +327,3 @@ if st.session_state.username == ADMIN_USER:
             st.write(f"👤 {user} → Prompt: {vals['prompt']} | Completion: {vals['completion']} | Total: {vals['total']} | €: {vals['cost']:.4f}")
     else:
         st.write("Aucune donnée de tokens disponible.")
-
-    st.write("---")
-    st.subheader("📜 Historique complet des actions")
-    if os.path.exists(HISTORY_FILE):
-        with open(HISTORY_FILE, "r") as f:
-            history = json.load(f)
-        history = sorted(history, key=lambda x: x["timestamp"], reverse=True)
-        for entry in history:
-            timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(entry["timestamp"]))
-            st.write(f"{timestamp} | 👤 {entry['user']} → Prompt: {entry['prompt']} | Completion: {entry['completion']} | Total: {entry['total']} | €: {entry['cost']:.4f}")
-    else:
-        st.write("Aucune donnée d'historique disponible.")
