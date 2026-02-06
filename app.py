@@ -101,6 +101,9 @@ Voici le document de l'eleve :
 # FIX LATEX STRICT POUR STREAMLIT
 # ======================
 def fix_latex_for_streamlit(text: str) -> str:
+    # Encadre probabilités
+    text = re.sub(r"(P\([^\)]*\))", r"\\(\1\\)", text)
+    
     # Encadre les equations classiques
     text = re.sub(r"(ax\^2 \+ bx \+ c = 0)", r"\\( \1 \\)", text)
     text = re.sub(r"(b\^2 - 4ac)", r"\\( \1 \\)", text)
@@ -346,5 +349,6 @@ if st.session_state.username == ADMIN_USER:
     for folder in os.listdir(TOKENS_DIR):
         data = load_tokens(folder)
         st.write(f"🏫 {folder} → Prompt: {data['prompt']} | Completion: {data['completion']} | Total: {data['total']} | €: {data['cost']:.4f}")
+
 
 
