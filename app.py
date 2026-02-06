@@ -64,7 +64,7 @@ client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 PROMPT_PEDAGOGIQUE = """
 Tu es un assistant pédagogique bienveillant.
 Explique clairement, simplement, avec des exemples si nécessaire.
-Ne dépasse pas 60 mots que ce soit pour les rappels ou pour la réponse chat. Dans les rappels, tu peux faire un mini résumé de cours sur la notion avec un exemple.
+Ne dépasse pas 60 mots que ce soit pour les rappels ou pour la réponse chat.
 Tu ne donnes jamais la réponse directement, tu guides progressivement l'élève.
 Quand tu écris des formules mathématiques :
 - utilise \( ... \) pour les formules en ligne
@@ -77,6 +77,9 @@ Voici le document de l'élève :
 USERS_FILE = "users.json"
 ACTIVE_USERS_FILE = "active_users.json"
 SESSION_TIMEOUT = 60
+
+TOKENS_FILE = "tokens.json"
+ADMIN_USER = "ahautecoeur2"
 
 # ======================
 # UTILITAIRES
@@ -142,13 +145,35 @@ def fix_latex_for_streamlit(text: str) -> str:
     return "\n".join(fixed_lines)
 
 # ======================
+# TOKENS
+# ======================
+def load_tokens():
+    if not os.path.exists(TOKENS_FILE):
+        return {}
+    with open(TOKENS_FILE, "r") as f:
+        return json.load(f)
+
+def save_tokens(data):
+    with open(TOKENS_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
+def add_tokens(username, prompt_tokens, completion_tokens):
+    data = load_tokens()
+    if username not in data:
+        data[username] = {"prompt": 0, "completion": 0, "total": 0}
+    data[username]["prompt"] += prompt_tokens
+    data[username]["completion"] += completion_tokens
+    data[username]["total"] += prompt_tokens + completion_tokens
+    save_tokens(data)
+
+# ======================
 # CHARGEMENT UTILISATEURS
 # ======================
 USERS = load_users()
 active_users = clean_expired_sessions()
 
 # ======================
-# LOGIN (1 clic)
+# LOGIN
 # ======================
 if not st.session_state.connected:
     st.title("🔐 Connexion élève")
@@ -171,7 +196,6 @@ if not st.session_state.connected:
                 st.error("Identifiant ou mot de passe incorrect")
     st.stop()
 
-# 🔁 MAJ SESSION ACTIVE (ANTI DOUBLE CONNEXION)
 active_users = load_active_users()
 active_users[st.session_state.username] = time.time()
 save_active_users(active_users)
@@ -181,9 +205,6 @@ save_active_users(active_users)
 # ======================
 st.title("🧠 BiNo, mon Assistant Pédagogique")
 
-# ======================
-# DECONNEXION (1 clic)
-# ======================
 with st.form("logout_form"):
     submitted_logout = st.form_submit_button("🚪 Déconnexion")
     if submitted_logout:
@@ -198,7 +219,6 @@ with st.form("logout_form"):
         st.session_state.chat_history = []
         st.stop()
 
-# ✅ COLONNES 50/50
 col_doc, col_chat = st.columns([1, 1])
 
 # ======================
@@ -206,9 +226,7 @@ col_doc, col_chat = st.columns([1, 1])
 # ======================
 with col_doc:
     st.subheader("📄 Document de travail")
-    uploaded_file = st.file_uploader(
-        "Dépose ton document", type=["txt", "docx", "pdf"]
-    )
+    uploaded_file = st.file_uploader("Dépose ton document", type=["txt", "docx", "pdf"])
 
     if uploaded_file:
         content = ""
@@ -257,6 +275,9 @@ with col_chat:
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": mots_cles}]
             )
+            usage = response.usage
+            add_tokens(st.session_state.username, usage.prompt_tokens, usage.completion_tokens)
+
             st.markdown("**📚 Rappel de cours :**")
             st.markdown(fix_latex_for_streamlit(response.choices[0].message.content))
 
@@ -270,19 +291,28 @@ with col_chat:
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}]
             )
+            usage = response.usage
+            add_tokens(st.session_state.username, usage.prompt_tokens, usage.completion_tokens)
+
             st.session_state.chat_history.append(
                 {"question": q, "answer": response.choices[0].message.content}
             )
             st.session_state.question_input = ""
 
-    # 🔹 Chat : Enter envoie directement
     st.text_input("Ta question", key="question_input", on_change=submit_question)
 
     for msg in reversed(st.session_state.chat_history):
         st.markdown("**❓ Question :**")
         st.markdown(msg["question"])
-        st.markdown("**🤖 BiNo :**")
+        st.markdown("**🤖 Assistant :**")
         st.markdown(fix_latex_for_streamlit(msg["answer"]))
         st.markdown("---")
 
-
+# ======================
+# ADMIN TOKENS VIEW
+# ======================
+if st.session_state.username == ADMIN_USER:
+    st.subheader("📊 Consommation de tokens (ADMIN)")
+    data = load_tokens()
+    for user, stats in data.items():
+        st.write(f"👤 {user} → {stats['total']} tokens")
