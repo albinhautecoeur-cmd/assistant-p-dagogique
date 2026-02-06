@@ -93,7 +93,7 @@ TOKENS_DIR = "tokens"
 SESSION_TIMEOUT = 60
 ADMIN_USER = "ahautecoeur2"
 # Séparer le prix tokens entrants et sortants (OpenAI tarif approximatif GPT-4o-mini)
-TOKEN_COST_INPUT_1K = 0.0003
+TOKEN_COST_INPUT_1K = 0.00015
 TOKEN_COST_OUTPUT_1K = 0.0006
 
 os.makedirs(TOKENS_DIR, exist_ok=True)
@@ -333,3 +333,4 @@ if st.session_state.username == ADMIN_USER:
     for folder in os.listdir(TOKENS_DIR):
         data = load_tokens(folder)
         st.write(f"🏫 {folder} → Prompt: {data['prompt']} | Completion: {data['completion']} | Total: {data['total']} | €: {data['cost']:.4f}")
+
