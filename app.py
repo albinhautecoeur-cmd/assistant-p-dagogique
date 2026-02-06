@@ -74,6 +74,9 @@ TOKENS_FILE = "tokens.json"
 SESSION_TIMEOUT = 60
 ADMIN_USER = "ahautecoeur2"
 
+# Prix par 1000 tokens pour gpt-4o-mini
+TOKEN_COST_PER_1K = 0.0015  # € par 1000 tokens
+
 # ======================
 # UTILITAIRES
 # ======================
@@ -111,10 +114,17 @@ def save_tokens(data):
 def add_tokens(username, prompt_tokens, completion_tokens):
     data = load_tokens()
     if username not in data:
-        data[username] = {"prompt": 0, "completion": 0, "total": 0}
+        data[username] = {
+            "prompt": 0,
+            "completion": 0,
+            "total": 0,
+            "cost": 0.0
+        }
     data[username]["prompt"] += prompt_tokens
     data[username]["completion"] += completion_tokens
     data[username]["total"] += prompt_tokens + completion_tokens
+    # Calcul du coût en €
+    data[username]["cost"] = (data[username]["total"] / 1000) * TOKEN_COST_PER_1K
     save_tokens(data)
 
 def count_tokens(text, model="gpt-4o-mini"):
@@ -312,4 +322,4 @@ if st.session_state.username == ADMIN_USER:
     st.subheader("📊 Consommation de tokens (ADMIN)")
     data = load_tokens()
     for user, stats in data.items():
-        st.write(f"👤 {user} → {stats['total']} tokens")
+        st.write(f"👤 {user} → Prompt: {stats['prompt']} | Completion: {stats['completion']} | Total: {stats['total']} | €: {stats['cost']:.4f}")
