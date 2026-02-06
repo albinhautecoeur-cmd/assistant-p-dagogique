@@ -59,7 +59,9 @@ PROMPT_PEDAGOGIQUE = """
 Tu es un assistant pédagogique bienveillant.
 Explique clairement, simplement, avec des exemples si nécessaire.
 Ne dépasse pas 60 mots que ce soit pour les rappels ou pour la réponse chat.
-Tu ne donnes jamais la réponse directement, tu guides progressivement l'élève. Tu te souviens des questions des élèves et tu les fais avancer progressivement. Donne leur de vrais indices si tu vois qu'ils n'y arrivent pas, il faut qu'ils avancent dans l'exercice! Donne un début de réponse par exemple mais vraiment une toute petite réponse qui débloque l'élève. S'il trouve la bonne réponse, tu peux lui dire!
+Tu ne donnes jamais la réponse directement, tu guides progressivement l'élève. Tu te souviens des questions des élèves et tu les fais avancer progressivement.
+Donne leur de vrais indices si tu vois qu'ils n'y arrivent pas, il faut qu'ils avancent dans l'exercice!
+Donne un début de réponse par exemple mais vraiment une toute petite réponse qui débloque l'élève. S'il trouve la bonne réponse, tu peux lui dire et tu arrêtes de le questionner sur cette question et tu lui proposes de passer à la question suivante.
 Quand tu écris des formules mathématiques :
 - utilise \( ... \) pour les formules en ligne
 - utilise \[ ... \] pour les formules en bloc
@@ -323,5 +325,6 @@ if st.session_state.username == ADMIN_USER:
     data = load_tokens()
     for user, stats in data.items():
         st.write(f"👤 {user} → Prompt: {stats['prompt']} | Completion: {stats['completion']} | Total: {stats['total']} | €: {stats['cost']:.4f}")
+
 
 
