@@ -291,7 +291,12 @@ with col_chat:
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": mots_cles}]
             )
-            add_tokens(etab, count_tokens(mots_cles), count_tokens(response.choices[0].message.content))
+           # Utilisation exacte des tokens facturés par OpenAI
+usage = response.usage
+prompt_tokens = usage["prompt_tokens"]
+completion_tokens = usage["completion_tokens"]
+add_tokens(etab, prompt_tokens, completion_tokens)
+
             st.markdown(fix_latex_for_streamlit(response.choices[0].message.content))
 
     st.subheader("💬 Chat pédagogique")
@@ -304,7 +309,12 @@ with col_chat:
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}]
             )
-            add_tokens(etab, count_tokens(prompt), count_tokens(response.choices[0].message.content))
+            # Utilisation exacte des tokens facturés par OpenAI
+usage = response.usage
+prompt_tokens = usage["prompt_tokens"]
+completion_tokens = usage["completion_tokens"]
+add_tokens(etab, prompt_tokens, completion_tokens)
+
             st.session_state.chat_history.append({"question": q, "answer": response.choices[0].message.content})
             st.session_state.question_input = ""
 
@@ -325,4 +335,5 @@ if st.session_state.username == ADMIN_USER:
     for folder in os.listdir(TOKENS_DIR):
         data = load_tokens(folder)
         st.write(f"🏫 {folder} → Prompt: {data['prompt']} | Completion: {data['completion']} | Total: {data['total']} | €: {data['cost']:.4f}")
+
 
