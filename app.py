@@ -59,9 +59,7 @@ PROMPT_PEDAGOGIQUE = """
 Tu es un assistant pédagogique bienveillant.
 Explique clairement, simplement, avec des exemples si nécessaire.
 Ne dépasse pas 60 mots que ce soit pour les rappels ou pour la réponse chat.
-Tu ne donnes jamais la réponse directement, tu guides progressivement l'élève. Tu te souviens des questions des élèves et tu les fais avancer progressivement.
-Donne leur de vrais indices si tu vois qu'ils n'y arrivent pas, il faut qu'ils avancent dans l'exercice!
-Donne un début de réponse par exemple mais vraiment une toute petite réponse qui débloque l'élève. S'il trouve la bonne réponse, tu peux lui dire et tu arrêtes de le questionner sur cette question et tu lui proposes de passer à la question suivante.
+Tu ne donnes jamais la réponse directement, tu guides progressivement l'élève.
 Quand tu écris des formules mathématiques :
 - utilise \( ... \) pour les formules en ligne
 - utilise \[ ... \] pour les formules en bloc
@@ -73,6 +71,7 @@ Voici le document de l'élève :
 USERS_FILE = "users.json"
 ACTIVE_USERS_FILE = "active_users.json"
 TOKENS_FILE = "tokens.json"
+HISTORY_FILE = "tokens_history.json"
 SESSION_TIMEOUT = 60
 ADMIN_USER = "ahautecoeur2"
 
@@ -103,6 +102,7 @@ def clean_expired_sessions():
     save_active_users(updated)
     return updated
 
+# Tokens cumulés par utilisateur
 def load_tokens():
     if not os.path.exists(TOKENS_FILE):
         return {}
@@ -113,6 +113,30 @@ def save_tokens(data):
     with open(TOKENS_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
+# Historique complet
+def add_tokens_history(username, prompt_tokens, completion_tokens):
+    if not os.path.exists(HISTORY_FILE):
+        history = []
+    else:
+        with open(HISTORY_FILE, "r") as f:
+            history = json.load(f)
+
+    total_tokens = prompt_tokens + completion_tokens
+    cost = (total_tokens / 1000) * TOKEN_COST_PER_1K
+
+    history.append({
+        "timestamp": time.time(),
+        "user": username,
+        "prompt": prompt_tokens,
+        "completion": completion_tokens,
+        "total": total_tokens,
+        "cost": cost
+    })
+
+    with open(HISTORY_FILE, "w") as f:
+        json.dump(history, f, indent=2)
+
+# Mise à jour cumulée
 def add_tokens(username, prompt_tokens, completion_tokens):
     data = load_tokens()
     if username not in data:
@@ -125,7 +149,6 @@ def add_tokens(username, prompt_tokens, completion_tokens):
     data[username]["prompt"] += prompt_tokens
     data[username]["completion"] += completion_tokens
     data[username]["total"] += prompt_tokens + completion_tokens
-    # Calcul du coût en €
     data[username]["cost"] = (data[username]["total"] / 1000) * TOKEN_COST_PER_1K
     save_tokens(data)
 
@@ -284,6 +307,7 @@ with col_chat:
             prompt_tokens = count_tokens(mots_cles)
             completion_tokens = count_tokens(response.choices[0].message.content)
             add_tokens(st.session_state.username, prompt_tokens, completion_tokens)
+            add_tokens_history(st.session_state.username, prompt_tokens, completion_tokens)
 
             st.markdown("**📚 Rappel de cours :**")
             st.markdown(fix_latex_for_streamlit(response.choices[0].message.content))
@@ -302,6 +326,7 @@ with col_chat:
             prompt_tokens = count_tokens(prompt)
             completion_tokens = count_tokens(response.choices[0].message.content)
             add_tokens(st.session_state.username, prompt_tokens, completion_tokens)
+            add_tokens_history(st.session_state.username, prompt_tokens, completion_tokens)
 
             st.session_state.chat_history.append(
                 {"question": q, "answer": response.choices[0].message.content}
@@ -318,13 +343,15 @@ with col_chat:
         st.markdown("---")
 
 # ======================
-# ADMIN VIEW
+# ADMIN VIEW (historique complet)
 # ======================
 if st.session_state.username == ADMIN_USER:
-    st.subheader("📊 Consommation de tokens (ADMIN)")
-    data = load_tokens()
-    for user, stats in data.items():
-        st.write(f"👤 {user} → Prompt: {stats['prompt']} | Completion: {stats['completion']} | Total: {stats['total']} | €: {stats['cost']:.4f}")
-
-
-
+    st.subheader("📊 Historique complet des tokens (ADMIN)")
+    if os.path.exists(HISTORY_FILE):
+        with open(HISTORY_FILE, "r") as f:
+            history = json.load(f)
+        for entry in history:
+            timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(entry["timestamp"]))
+            st.write(f"{timestamp} | 👤 {entry['user']} → Prompt: {entry['prompt']} | Completion: {entry['completion']} | Total: {entry['total']} | €: {entry['cost']:.4f}")
+    else:
+        st.write("Aucune donnée disponible.")
