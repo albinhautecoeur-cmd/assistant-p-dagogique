@@ -3,6 +3,7 @@ import json
 import os
 import time
 import re
+import tiktoken
 from openai import OpenAI
 from PIL import Image, ImageDraw, ImageFont
 import io
@@ -30,15 +31,10 @@ if "chat_history" not in st.session_state:
 # ======================
 st.set_page_config(page_title="Assistant pédagogique", layout="wide")
 
-# 🎨 STYLE PASTEL
 st.markdown("""
 <style>
-.stApp {
-    background-color: #eaf3ff;
-}
-h1, h2, h3 {
-    color: #1f3c88;
-}
+.stApp { background-color: #eaf3ff; }
+h1, h2, h3 { color: #1f3c88; }
 .stButton>button {
     background: linear-gradient(135deg, #7aa2ff, #a5c9ff);
     color: white;
@@ -53,9 +49,7 @@ h1, h2, h3 {
     border: 1px solid #aac4ff;
     background-color: #f5f9ff;
 }
-.block-container {
-    padding-top: 2rem;
-}
+.block-container { padding-top: 2rem; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -76,9 +70,8 @@ Voici le document de l'élève :
 
 USERS_FILE = "users.json"
 ACTIVE_USERS_FILE = "active_users.json"
-SESSION_TIMEOUT = 60
-
 TOKENS_FILE = "tokens.json"
+SESSION_TIMEOUT = 60
 ADMIN_USER = "ahautecoeur2"
 
 # ======================
@@ -104,6 +97,29 @@ def clean_expired_sessions():
     updated = {u: t for u, t in active_users.items() if now - t < SESSION_TIMEOUT}
     save_active_users(updated)
     return updated
+
+def load_tokens():
+    if not os.path.exists(TOKENS_FILE):
+        return {}
+    with open(TOKENS_FILE, "r") as f:
+        return json.load(f)
+
+def save_tokens(data):
+    with open(TOKENS_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
+def add_tokens(username, prompt_tokens, completion_tokens):
+    data = load_tokens()
+    if username not in data:
+        data[username] = {"prompt": 0, "completion": 0, "total": 0}
+    data[username]["prompt"] += prompt_tokens
+    data[username]["completion"] += completion_tokens
+    data[username]["total"] += prompt_tokens + completion_tokens
+    save_tokens(data)
+
+def count_tokens(text, model="gpt-4o-mini"):
+    enc = tiktoken.encoding_for_model(model)
+    return len(enc.encode(text))
 
 def text_to_image(text, width=600):
     font = ImageFont.load_default()
@@ -143,28 +159,6 @@ def fix_latex_for_streamlit(text: str) -> str:
         else:
             fixed_lines.append(line)
     return "\n".join(fixed_lines)
-
-# ======================
-# TOKENS
-# ======================
-def load_tokens():
-    if not os.path.exists(TOKENS_FILE):
-        return {}
-    with open(TOKENS_FILE, "r") as f:
-        return json.load(f)
-
-def save_tokens(data):
-    with open(TOKENS_FILE, "w") as f:
-        json.dump(data, f, indent=2)
-
-def add_tokens(username, prompt_tokens, completion_tokens):
-    data = load_tokens()
-    if username not in data:
-        data[username] = {"prompt": 0, "completion": 0, "total": 0}
-    data[username]["prompt"] += prompt_tokens
-    data[username]["completion"] += completion_tokens
-    data[username]["total"] += prompt_tokens + completion_tokens
-    save_tokens(data)
 
 # ======================
 # CHARGEMENT UTILISATEURS
@@ -275,8 +269,9 @@ with col_chat:
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": mots_cles}]
             )
-            usage = response.usage
-            add_tokens(st.session_state.username, usage.prompt_tokens, usage.completion_tokens)
+            prompt_tokens = count_tokens(mots_cles)
+            completion_tokens = count_tokens(response.choices[0].message.content)
+            add_tokens(st.session_state.username, prompt_tokens, completion_tokens)
 
             st.markdown("**📚 Rappel de cours :**")
             st.markdown(fix_latex_for_streamlit(response.choices[0].message.content))
@@ -291,8 +286,10 @@ with col_chat:
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}]
             )
-            usage = response.usage
-            add_tokens(st.session_state.username, usage.prompt_tokens, usage.completion_tokens)
+
+            prompt_tokens = count_tokens(prompt)
+            completion_tokens = count_tokens(response.choices[0].message.content)
+            add_tokens(st.session_state.username, prompt_tokens, completion_tokens)
 
             st.session_state.chat_history.append(
                 {"question": q, "answer": response.choices[0].message.content}
@@ -309,7 +306,7 @@ with col_chat:
         st.markdown("---")
 
 # ======================
-# ADMIN TOKENS VIEW
+# ADMIN VIEW
 # ======================
 if st.session_state.username == ADMIN_USER:
     st.subheader("📊 Consommation de tokens (ADMIN)")
