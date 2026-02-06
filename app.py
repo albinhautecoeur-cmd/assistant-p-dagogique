@@ -71,12 +71,12 @@ REGLES ABSOLUES :
 - Tu n'affiches JAMAIS de code informatique.
 
 FORMAT OBLIGATOIRE :
-1) Reformule la question de l'eleve.
+1) Reformule la question de l'exercice.
 2) Donne UN indice.
-3) Termine par une question courte.
+3) Continue à donner des indices de plus enplus proche de la réponse.
 
 PARTIE RAPPEL :
-- Rappel tres court.
+- Rappel tres court pas plus de 60 mots.
 - Jamais de methode complete.
 - Jamais de solution.
 
@@ -346,4 +346,5 @@ if st.session_state.username == ADMIN_USER:
     for folder in os.listdir(TOKENS_DIR):
         data = load_tokens(folder)
         st.write(f"🏫 {folder} → Prompt: {data['prompt']} | Completion: {data['completion']} | Total: {data['total']} | €: {data['cost']:.4f}")
+
 
