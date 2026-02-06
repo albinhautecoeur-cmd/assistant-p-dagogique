@@ -1,8 +1,30 @@
 {
-  "eleve001": "ABC123",
-  "eleve002": "DEF456",
-  "eleve003": "GHI789",
-  "ahautecoeur2": "Pepsie@62217"
+  "eleve001": {
+    "password": "mdp1",
+    "etablissement": "lycee1"
+  },
+  "eleve002": {
+    "password": "mdp2",
+    "etablissement": "lycee1"
+      },
+  "eleve003": {
+    "password": "mdp3",
+    "etablissement": "lycee1"
+      },
+  "eleve004": {
+    "password": "mdp4",
+    "etablissement": "lycee1"
+      },
+  "eleve005": {
+    "password": "mdp5",
+    "etablissement": "lycee2"
+  },
+  "ahautecoeur2": {
+    "password": "Pepsie@62217",
+    "etablissement": "admin"
+  }
 }
+
+
 
 
