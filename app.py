@@ -282,7 +282,7 @@ with col_chat:
     for msg in reversed(st.session_state.chat_history):
         st.markdown("**❓ Question :**")
         st.markdown(msg["question"])
-        st.markdown("**🤖 Assistant :**")
+        st.markdown("**🤖 BiNo :**")
         st.markdown(fix_latex_for_streamlit(msg["answer"]))
         st.markdown("---")
 
@@ -294,3 +294,4 @@ if st.session_state.username == ADMIN_USER:
     for folder in os.listdir(TOKENS_DIR):
         data = load_tokens(folder)
         st.write(f"🏫 {folder} → Prompt: {data['prompt']} | Completion: {data['completion']} | Total: {data['total']} | €: {data['cost']:.4f}")
+
