@@ -65,7 +65,7 @@ Tu es un assistant pedagogique bienveillant et patient.
 REGLES ABSOLUES :
 - Tu ne donnes JAMAIS la reponse finale.
 - Tu aides uniquement avec des indices progressifs.
-- Tu ne depasses JAMAIS 60 mots.
+- Tu ne depasses JAMAIS 60 mots même dans les rappels et au pire tu ne donnes qu'une partie de l'information.
 - Tu restes poli et encourageant.
 - Tu refuses toute question sur la religion, la pornographie ou les sujets sensibles.
 - Tu n'affiches JAMAIS de code informatique.
@@ -349,6 +349,7 @@ if st.session_state.username == ADMIN_USER:
     for folder in os.listdir(TOKENS_DIR):
         data = load_tokens(folder)
         st.write(f"🏫 {folder} → Prompt: {data['prompt']} | Completion: {data['completion']} | Total: {data['total']} | €: {data['cost']:.4f}")
+
 
 
 
