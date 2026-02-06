@@ -288,10 +288,9 @@ with col_chat:
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": mots_cles}]
             )
-            # ✅ Utilisation exacte des tokens facturés par OpenAI
-            usage = response.usage
-            prompt_tokens = usage["prompt_tokens"]
-            completion_tokens = usage["completion_tokens"]
+            # ✅ récupération sécurisée des tokens
+            prompt_tokens = getattr(getattr(response, "usage", None), "prompt_tokens", count_tokens(mots_cles))
+            completion_tokens = getattr(getattr(response, "usage", None), "completion_tokens", count_tokens(response.choices[0].message.content))
             add_tokens(etab, prompt_tokens, completion_tokens)
 
             st.markdown(fix_latex_for_streamlit(response.choices[0].message.content))
@@ -306,10 +305,9 @@ with col_chat:
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}]
             )
-            # ✅ Utilisation exacte des tokens facturés par OpenAI
-            usage = response.usage
-            prompt_tokens = usage["prompt_tokens"]
-            completion_tokens = usage["completion_tokens"]
+            # ✅ récupération sécurisée des tokens
+            prompt_tokens = getattr(getattr(response, "usage", None), "prompt_tokens", count_tokens(prompt))
+            completion_tokens = getattr(getattr(response, "usage", None), "completion_tokens", count_tokens(response.choices[0].message.content))
             add_tokens(etab, prompt_tokens, completion_tokens)
 
             st.session_state.chat_history.append({"question": q, "answer": response.choices[0].message.content})
