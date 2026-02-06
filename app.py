@@ -70,12 +70,13 @@ Voici le document de l'élève :
 
 USERS_FILE = "users.json"
 ACTIVE_USERS_FILE = "active_users.json"
-TOKENS_FILE = "tokens.json"
+TOKENS_DIR = "tokens"
 SESSION_TIMEOUT = 60
 ADMIN_USER = "ahautecoeur2"
 
-# Prix par 1000 tokens pour gpt-4o-mini
-TOKEN_COST_PER_1K = 0.0015  # € par 1000 tokens
+TOKEN_COST_PER_1K = 0.0015
+
+os.makedirs(TOKENS_DIR, exist_ok=True)
 
 # ======================
 # UTILITAIRES
@@ -83,6 +84,45 @@ TOKEN_COST_PER_1K = 0.0015  # € par 1000 tokens
 def load_users():
     with open(USERS_FILE, "r") as f:
         return json.load(f)
+
+def get_password(user):
+    if isinstance(USERS[user], dict):
+        return USERS[user]["password"]
+    return USERS[user]
+
+def get_etablissement(user):
+    if isinstance(USERS[user], dict):
+        return USERS[user].get("etablissement", "etablissement_defaut")
+    return "etablissement_defaut"
+
+def get_token_file(etab):
+    path = os.path.join(TOKENS_DIR, etab)
+    os.makedirs(path, exist_ok=True)
+    return os.path.join(path, "tokens.json")
+
+def load_tokens(etab):
+    file = get_token_file(etab)
+    if not os.path.exists(file):
+        return {"prompt": 0, "completion": 0, "total": 0, "cost": 0.0}
+    with open(file, "r") as f:
+        return json.load(f)
+
+def save_tokens(etab, data):
+    file = get_token_file(etab)
+    with open(file, "w") as f:
+        json.dump(data, f, indent=2)
+
+def add_tokens(etab, prompt_tokens, completion_tokens):
+    data = load_tokens(etab)
+    data["prompt"] += prompt_tokens
+    data["completion"] += completion_tokens
+    data["total"] += prompt_tokens + completion_tokens
+    data["cost"] = (data["total"] / 1000) * TOKEN_COST_PER_1K
+    save_tokens(etab, data)
+
+def count_tokens(text, model="gpt-4o-mini"):
+    enc = tiktoken.encoding_for_model(model)
+    return len(enc.encode(text))
 
 def load_active_users():
     if not os.path.exists(ACTIVE_USERS_FILE):
@@ -101,75 +141,21 @@ def clean_expired_sessions():
     save_active_users(updated)
     return updated
 
-# Tokens cumulés par utilisateur
-def load_tokens():
-    if not os.path.exists(TOKENS_FILE):
-        return {}
-    with open(TOKENS_FILE, "r") as f:
-        return json.load(f)
-
-def save_tokens(data):
-    with open(TOKENS_FILE, "w") as f:
-        json.dump(data, f, indent=2)
-
-# Mise à jour cumulée
-def add_tokens(username, prompt_tokens, completion_tokens):
-    data = load_tokens()
-    if username not in data:
-        data[username] = {
-            "prompt": 0,
-            "completion": 0,
-            "total": 0,
-            "cost": 0.0
-        }
-    data[username]["prompt"] += prompt_tokens
-    data[username]["completion"] += completion_tokens
-    data[username]["total"] += prompt_tokens + completion_tokens
-    data[username]["cost"] = (data[username]["total"] / 1000) * TOKEN_COST_PER_1K
-    save_tokens(data)
-
-def count_tokens(text, model="gpt-4o-mini"):
-    enc = tiktoken.encoding_for_model(model)
-    return len(enc.encode(text))
-
 def text_to_image(text, width=600):
     font = ImageFont.load_default()
     lines = text.split("\n")
-    dummy_img = Image.new("RGB", (width, 1000))
-    draw = ImageDraw.Draw(dummy_img)
-    line_height = draw.textbbox((0,0), "Hg", font=font)[3] + 4
-    height = line_height * len(lines) + 20
-    img = Image.new("RGB", (width, height), "white")
+    img = Image.new("RGB", (width, 20 * len(lines)), "white")
     draw = ImageDraw.Draw(img)
-    y = 10
+    y = 5
     for line in lines:
         draw.text((10, y), line, fill="black", font=font)
-        y += line_height
+        y += 20
     return img
 
-# ======================
-# FIX LATEX
-# ======================
 def fix_latex_for_streamlit(text: str) -> str:
-    text = re.sub(r"I\s*\n\s*0", r"I_0", text)
-    text = re.sub(r"10\s*\n\s*-\s*12", r"10^{-12}", text)
-    text = re.sub(r"W\s*/\s*m\s*2", r"\\text{W/m}^2", text)
     text = re.sub(r"\\\[(.*?)\\\]", r"$$\1$$", text, flags=re.S)
     text = re.sub(r"\\\((.*?)\\\)", r"$\1$", text, flags=re.S)
-    lines = text.split("\n")
-    fixed_lines = []
-    for line in lines:
-        stripped = line.strip()
-        is_math_line = (
-            "\\" in stripped
-            and any(cmd in stripped for cmd in ["\\sqrt", "\\frac", "\\log"])
-            and "=" in stripped
-        )
-        if is_math_line and not stripped.startswith("$"):
-            fixed_lines.append(f"$$\n{stripped}\n$$")
-        else:
-            fixed_lines.append(line)
-    return "\n".join(fixed_lines)
+    return text
 
 # ======================
 # CHARGEMENT UTILISATEURS
@@ -188,7 +174,7 @@ if not st.session_state.connected:
         submitted_login = st.form_submit_button("Connexion")
         if submitted_login:
             active_users = clean_expired_sessions()
-            if username_input in USERS and USERS[username_input] == password_input:
+            if username_input in USERS and get_password(username_input) == password_input:
                 if username_input in active_users:
                     st.error("❌ Ce compte est déjà connecté sur un autre appareil.")
                 else:
@@ -204,6 +190,8 @@ if not st.session_state.connected:
 active_users = load_active_users()
 active_users[st.session_state.username] = time.time()
 save_active_users(active_users)
+
+etab = get_etablissement(st.session_state.username)
 
 # ======================
 # INTERFACE
@@ -245,13 +233,6 @@ with col_doc:
             doc = docx.Document(uploaded_file)
             content = "\n".join([p.text for p in doc.paragraphs])
             images = [text_to_image(content)]
-            for rel in doc.part._rels:
-                rel_obj = doc.part._rels[rel]
-                if "image" in rel_obj.target_ref:
-                    image_data = rel_obj.target_part.blob
-                    img = Image.open(io.BytesIO(image_data))
-                    img.thumbnail((600, 800))
-                    images.append(img)
 
         elif uploaded_file.name.endswith(".pdf"):
             pdf_bytes = uploaded_file.read()
@@ -260,7 +241,6 @@ with col_doc:
                 content += page.get_text()
                 pix = page.get_pixmap()
                 img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                img.thumbnail((600, 800))
                 images.append(img)
 
         st.session_state.document_content = content
@@ -280,11 +260,7 @@ with col_chat:
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": mots_cles}]
             )
-            prompt_tokens = count_tokens(mots_cles)
-            completion_tokens = count_tokens(response.choices[0].message.content)
-            add_tokens(st.session_state.username, prompt_tokens, completion_tokens)
-
-            st.markdown("**📚 Rappel de cours :**")
+            add_tokens(etab, count_tokens(mots_cles), count_tokens(response.choices[0].message.content))
             st.markdown(fix_latex_for_streamlit(response.choices[0].message.content))
 
     st.subheader("💬 Chat pédagogique")
@@ -297,14 +273,8 @@ with col_chat:
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}]
             )
-
-            prompt_tokens = count_tokens(prompt)
-            completion_tokens = count_tokens(response.choices[0].message.content)
-            add_tokens(st.session_state.username, prompt_tokens, completion_tokens)
-
-            st.session_state.chat_history.append(
-                {"question": q, "answer": response.choices[0].message.content}
-            )
+            add_tokens(etab, count_tokens(prompt), count_tokens(response.choices[0].message.content))
+            st.session_state.chat_history.append({"question": q, "answer": response.choices[0].message.content})
             st.session_state.question_input = ""
 
     st.text_input("Ta question", key="question_input", on_change=submit_question)
@@ -317,13 +287,10 @@ with col_chat:
         st.markdown("---")
 
 # ======================
-# ADMIN VIEW (CUMULS SEULS)
+# ADMIN VIEW (PAR ÉTABLISSEMENT)
 # ======================
 if st.session_state.username == ADMIN_USER:
-    st.subheader("📊 Tokens cumulés par utilisateur (ADMIN)")
-    tokens_data = load_tokens()
-    if tokens_data:
-        for user, vals in tokens_data.items():
-            st.write(f"👤 {user} → Prompt: {vals['prompt']} | Completion: {vals['completion']} | Total: {vals['total']} | €: {vals['cost']:.4f}")
-    else:
-        st.write("Aucune donnée de tokens disponible.")
+    st.subheader("📊 Tokens cumulés par établissement")
+    for folder in os.listdir(TOKENS_DIR):
+        data = load_tokens(folder)
+        st.write(f"🏫 {folder} → Prompt: {data['prompt']} | Completion: {data['completion']} | Total: {data['total']} | €: {data['cost']:.4f}")
