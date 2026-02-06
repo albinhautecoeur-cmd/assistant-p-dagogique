@@ -343,15 +343,25 @@ with col_chat:
         st.markdown("---")
 
 # ======================
-# ADMIN VIEW (historique complet)
+# ADMIN VIEW (totaux + historique)
 # ======================
 if st.session_state.username == ADMIN_USER:
-    st.subheader("📊 Historique complet des tokens (ADMIN)")
+    st.subheader("📊 Tokens cumulés par utilisateur (ADMIN)")
+    tokens_data = load_tokens()
+    if tokens_data:
+        for user, vals in tokens_data.items():
+            st.write(f"👤 {user} → Prompt: {vals['prompt']} | Completion: {vals['completion']} | Total: {vals['total']} | €: {vals['cost']:.4f}")
+    else:
+        st.write("Aucune donnée de tokens disponible.")
+
+    st.write("---")
+    st.subheader("📜 Historique complet des actions")
     if os.path.exists(HISTORY_FILE):
         with open(HISTORY_FILE, "r") as f:
             history = json.load(f)
+        history = sorted(history, key=lambda x: x["timestamp"], reverse=True)
         for entry in history:
             timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(entry["timestamp"]))
             st.write(f"{timestamp} | 👤 {entry['user']} → Prompt: {entry['prompt']} | Completion: {entry['completion']} | Total: {entry['total']} | €: {entry['cost']:.4f}")
     else:
-        st.write("Aucune donnée disponible.")
+        st.write("Aucune donnée d'historique disponible.")
