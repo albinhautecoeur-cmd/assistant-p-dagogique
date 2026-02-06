@@ -92,7 +92,9 @@ ACTIVE_USERS_FILE = "active_users.json"
 TOKENS_DIR = "tokens"
 SESSION_TIMEOUT = 60
 ADMIN_USER = "ahautecoeur2"
-TOKEN_COST_PER_1K = 0.0015
+# Séparer le prix tokens entrants et sortants (OpenAI tarif approximatif GPT-4o-mini)
+TOKEN_COST_INPUT_1K = 0.0003
+TOKEN_COST_OUTPUT_1K = 0.0006
 
 os.makedirs(TOKENS_DIR, exist_ok=True)
 
@@ -135,7 +137,7 @@ def add_tokens(etab, prompt_tokens, completion_tokens):
     data["prompt"] += prompt_tokens
     data["completion"] += completion_tokens
     data["total"] += prompt_tokens + completion_tokens
-    data["cost"] = (data["total"] / 1000) * TOKEN_COST_PER_1K
+    data["cost"] = (prompt_tokens / 1000 * TOKEN_COST_INPUT_1K) + (completion_tokens / 1000 * TOKEN_COST_OUTPUT_1K)
     save_tokens(etab, data)
 
 def count_tokens(text, model="gpt-4o-mini"):
