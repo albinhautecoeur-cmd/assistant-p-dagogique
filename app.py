@@ -81,6 +81,7 @@ POUR LE RAPPEL DE COURS :
 - Tu expliques uniquement les notions.
 
 SI L'ELEVE DIT QU'IL A TROUVE :
+- Si l'élève a bon sur une étape intermédiaire, tu peux le lui dire et lui proposer d'aller plus loin
 - Tu ne confirmes pas la reponse.
 - Tu lui proposes une autre question liee au meme theme.
 
@@ -320,6 +321,7 @@ if st.session_state.username == ADMIN_USER:
     for folder in os.listdir(TOKENS_DIR):
         data = load_tokens(folder)
         st.write(f"🏫 {folder} → Prompt: {data['prompt']} | Completion: {data['completion']} | Total: {data['total']} | €: {data['cost']:.4f}")
+
 
 
 
