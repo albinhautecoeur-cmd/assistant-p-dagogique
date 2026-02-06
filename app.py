@@ -174,16 +174,13 @@ def text_to_image(text, width=600):
 # FIX LATEX STRICT
 # ======================
 def fix_latex_for_streamlit(text: str) -> str:
-    # Remplace caractères Unicode
     text = text.replace("Δ", "\\Delta")
     text = text.replace("∩", "\\cap")
-    text = text.replace("̅", "\\overline")  # barre de complément
-    # Encadre toutes les expressions mathématiques en $...$
+    text = text.replace("̅", "\\overline")
     text = re.sub(r"(?<!\$)(P\([^\)]*\))", r"$\1$", text)
     text = re.sub(r"(?<!\$)(ax\^2 \+ bx \+ c = 0)", r"$\1$", text)
     text = re.sub(r"(?<!\$)(b\^2 - 4ac)", r"$\1$", text)
     text = re.sub(r"(?<!\$)(x\s*=\s*\\frac\{-b\s*\\pm\s*\\sqrt\{D\}\}\{2a\})", r"$\1$", text)
-    # Convertit tout \( ... \) ou \[ ... \] en $ ... $ ou $$ ... $$ pour Streamlit
     text = re.sub(r"\\\[(.*?)\\\]", r"$$\1$$", text, flags=re.S)
     text = re.sub(r"\\\((.*?)\\\)", r"$\1$", text, flags=re.S)
     return text
@@ -291,11 +288,11 @@ with col_chat:
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": mots_cles}]
             )
-           # Utilisation exacte des tokens facturés par OpenAI
-usage = response.usage
-prompt_tokens = usage["prompt_tokens"]
-completion_tokens = usage["completion_tokens"]
-add_tokens(etab, prompt_tokens, completion_tokens)
+            # ✅ Utilisation exacte des tokens facturés par OpenAI
+            usage = response.usage
+            prompt_tokens = usage["prompt_tokens"]
+            completion_tokens = usage["completion_tokens"]
+            add_tokens(etab, prompt_tokens, completion_tokens)
 
             st.markdown(fix_latex_for_streamlit(response.choices[0].message.content))
 
@@ -309,11 +306,11 @@ add_tokens(etab, prompt_tokens, completion_tokens)
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}]
             )
-            # Utilisation exacte des tokens facturés par OpenAI
-usage = response.usage
-prompt_tokens = usage["prompt_tokens"]
-completion_tokens = usage["completion_tokens"]
-add_tokens(etab, prompt_tokens, completion_tokens)
+            # ✅ Utilisation exacte des tokens facturés par OpenAI
+            usage = response.usage
+            prompt_tokens = usage["prompt_tokens"]
+            completion_tokens = usage["completion_tokens"]
+            add_tokens(etab, prompt_tokens, completion_tokens)
 
             st.session_state.chat_history.append({"question": q, "answer": response.choices[0].message.content})
             st.session_state.question_input = ""
@@ -335,5 +332,3 @@ if st.session_state.username == ADMIN_USER:
     for folder in os.listdir(TOKENS_DIR):
         data = load_tokens(folder)
         st.write(f"🏫 {folder} → Prompt: {data['prompt']} | Completion: {data['completion']} | Total: {data['total']} | €: {data['cost']:.4f}")
-
-
