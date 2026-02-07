@@ -129,7 +129,7 @@ TOKENS_DIR = "tokens"
 SESSION_TIMEOUT = 60
 ADMIN_USER = "ahautecoeur2"
 
-TOKEN_COST_PER_1K = 0.0015
+TOKEN_COST_PER_1K = 0.0003
 
 os.makedirs(TOKENS_DIR, exist_ok=True)
 
@@ -349,6 +349,7 @@ if st.session_state.username == ADMIN_USER:
     for folder in os.listdir(TOKENS_DIR):
         data = load_tokens(folder)
         st.write(f"🏫 {folder} → Prompt: {data['prompt']} | Completion: {data['completion']} | Total: {data['total']} | €: {data['cost']:.4f}")
+
 
 
 
