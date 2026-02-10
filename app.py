@@ -55,18 +55,72 @@ h1, h2, h3 { color: #1f3c88; }
 
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
+# ======================
+# PROMPT PEDAGOGIQUE CORRIGE
+# ======================
 PROMPT_PEDAGOGIQUE = """
-Tu es un assistant pédagogique bienveillant.
-Explique clairement, simplement, avec des exemples si nécessaire.
-Ne dépasse pas 60 mots que ce soit pour les rappels ou pour la réponse chat.
-Tu ne donnes jamais la réponse directement, tu guides progressivement l'élève.
-Quand tu écris des formules mathématiques :
-- utilise \( ... \) pour les formules en ligne
-- utilise \[ ... \] pour les formules en bloc
-- n’utilise jamais de blocs de code LaTeX
+Tu es un assistant pedagogique bienveillant et patient.
 
-Voici le document de l'élève :
+REGLES ABSOLUES :
+- Tu ne donnes JAMAIS la reponse finale.
+- Tu aides uniquement avec des indices progressifs.
+- Tu ne depasses JAMAIS 60 mots même dans les rappels et au pire tu ne donnes qu'une partie de l'information.
+- Tu restes poli et encourageant.
+- Tu refuses toute question sur la religion, la pornographie ou les sujets sensibles.
+- Tu n'affiches JAMAIS de code informatique.
+
+FORMAT OBLIGATOIRE :
+1) Reformule la question de l'exercice.
+2) Donne UN indice.
+3) Continue à donner des indices de plus enplus proche de la réponse.
+
+PARTIE RAPPEL :
+- Rappel tres court pas plus de 60 mots.
+- Jamais de methode complete.
+- Jamais de solution.
+
+FORMULES MATHEMATIQUES (OBLIGATOIRE) :
+- Toute expression mathematique DOIT etre entre \( ... \) ou \[ ... \]
+- Exemple correct : \( ax^2 + bx + c = 0 \)
+- Exemple correct : \( \Delta = b^2 - 4ac \)
+- Exemple interdit : ax^2 + bx + c = 0
+- Exemple interdit : Δ = b^2 - 4ac
+
+Si tu ecris une formule sans delimiteur, tu dois la reformuler.
+
+INTERDICTIONS :
+- jamais de solution
+- jamais de code
+- jamais plus de 60 mots
+
+Voici le document de l'eleve :
 """
+
+# ======================
+# FIX LATEX STRICT POUR STREAMLIT
+# ======================
+def fix_latex_for_streamlit(text: str) -> str:
+    # Encadre probabilités
+    text = re.sub(r"(P\([^\)]*\))", r"\\(\1\\)", text)
+
+    # Encadre les equations classiques
+    text = re.sub(r"(ax\^2 \+ bx \+ c = 0)", r"\\( \1 \\)", text)
+    text = re.sub(r"(b\^2 - 4ac)", r"\\( \1 \\)", text)
+    text = re.sub(r"(\\Delta\s*=\s*b\^2\s*-\s*4ac)", r"\\( \1 \\)", text)
+
+    # Remplace Delta unicode par LaTeX
+    text = text.replace("Δ", "\\Delta")
+
+    # Formule quadratique
+    text = re.sub(r"x\s*=\s*\\frac\{-b\s*\\pm\s*\\sqrt\{D\}\}\{2a\}",
+                  r"\\( x = \\frac{-b \\pm \\sqrt{D}}{2a} \\)", text)
+
+    # Corrige les anciens formats
+    text = re.sub(r"\\\[(.*?)\\\]", r"$$\1$$", text, flags=re.S)
+    text = re.sub(r"\\\((.*?)\\\)", r"$\1$", text, flags=re.S)
+
+    return text
+
 
 USERS_FILE = "users.json"
 ACTIVE_USERS_FILE = "active_users.json"
@@ -75,6 +129,7 @@ SESSION_TIMEOUT = 60
 ADMIN_USER = "ahautecoeur2"
 
 TOKEN_COST_PER_1K = 0.0015
+TOKEN_COST_PER_1K = 0.0003
 
 os.makedirs(TOKENS_DIR, exist_ok=True)
 
@@ -282,7 +337,6 @@ with col_chat:
     for msg in reversed(st.session_state.chat_history):
         st.markdown("**❓ Question :**")
         st.markdown(msg["question"])
-        st.markdown("**🤖 Assistant :**")
         st.markdown("**🤖 BiNo :**")
         st.markdown(fix_latex_for_streamlit(msg["answer"]))
         st.markdown("---")
