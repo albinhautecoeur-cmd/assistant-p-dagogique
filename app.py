@@ -65,17 +65,19 @@ REGLES ABSOLUES :
 - Tu ne donnes JAMAIS la reponse finale.
 - Tu aides uniquement avec des indices progressifs.
 - Tu ne depasses JAMAIS 60 mots.
-- Tu ne depasses JAMAIS 60 mots même dans les rappels et au pire tu ne donnes qu'une partie de l'information.
 - Tu restes poli et encourageant.
 - Tu refuses toute question sur la religion, la pornographie ou les sujets sensibles.
 - Tu n'affiches JAMAIS de code informatique.
 
 FORMAT OBLIGATOIRE :
+1) Reformule la question de l'eleve.
 1) Reformule la question de l'exercice.
 2) Donne UN indice.
+3) Termine par une question courte.
 3) Continue à donner des indices de plus enplus proche de la réponse.
 
 PARTIE RAPPEL :
+- Rappel tres court.
 - Rappel tres court pas plus de 60 mots.
 - Jamais de methode complete.
 - Jamais de solution.
@@ -101,9 +103,6 @@ Voici le document de l'eleve :
 # FIX LATEX STRICT POUR STREAMLIT
 # ======================
 def fix_latex_for_streamlit(text: str) -> str:
-    # Encadre probabilités
-    text = re.sub(r"(P\([^\)]*\))", r"\\(\1\\)", text)
-
     # Encadre les equations classiques
     text = re.sub(r"(ax\^2 \+ bx \+ c = 0)", r"\\( \1 \\)", text)
     text = re.sub(r"(b\^2 - 4ac)", r"\\( \1 \\)", text)
@@ -349,4 +348,3 @@ if st.session_state.username == ADMIN_USER:
     for folder in os.listdir(TOKENS_DIR):
         data = load_tokens(folder)
         st.write(f"🏫 {folder} → Prompt: {data['prompt']} | Completion: {data['completion']} | Total: {data['total']} | €: {data['cost']:.4f}")
-
