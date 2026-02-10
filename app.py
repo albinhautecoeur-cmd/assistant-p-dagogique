@@ -3,7 +3,6 @@ import json
 import os
 import time
 import re
-import tiktoken
 from openai import OpenAI
 from PIL import Image, ImageDraw, ImageFont
 import io
@@ -31,10 +30,15 @@ if "chat_history" not in st.session_state:
 # ======================
 st.set_page_config(page_title="Assistant pédagogique", layout="wide")
 
+# 🎨 STYLE PASTEL
 st.markdown("""
 <style>
-.stApp { background-color: #eaf3ff; }
-h1, h2, h3 { color: #1f3c88; }
+.stApp {
+    background-color: #eaf3ff;
+}
+h1, h2, h3 {
+    color: #1f3c88;
+}
 .stButton>button {
     background: linear-gradient(135deg, #7aa2ff, #a5c9ff);
     color: white;
@@ -49,7 +53,9 @@ h1, h2, h3 { color: #1f3c88; }
     border: 1px solid #aac4ff;
     background-color: #f5f9ff;
 }
-.block-container { padding-top: 2rem; }
+.block-container {
+    padding-top: 2rem;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -59,6 +65,7 @@ PROMPT_PEDAGOGIQUE = """
 Tu es un assistant pédagogique bienveillant.
 Explique clairement, simplement, avec des exemples si nécessaire.
 Ne dépasse pas 60 mots que ce soit pour les rappels ou pour la réponse chat.
+Ne dépasse pas 60 mots que ce soit pour les rappels ou pour la réponse chat. Dans les rappels, tu peux faire un mini résumé de cours sur la notion avec un exemple.
 Tu ne donnes jamais la réponse directement, tu guides progressivement l'élève.
 Quand tu écris des formules mathématiques :
 - utilise \( ... \) pour les formules en ligne
@@ -70,13 +77,7 @@ Voici le document de l'élève :
 
 USERS_FILE = "users.json"
 ACTIVE_USERS_FILE = "active_users.json"
-TOKENS_FILE = "tokens.json"
-HISTORY_FILE = "tokens_history.json"
 SESSION_TIMEOUT = 60
-ADMIN_USER = "ahautecoeur2"
-
-# Prix par 1000 tokens pour gpt-4o-mini
-TOKEN_COST_PER_1K = 0.0015  # € par 1000 tokens
 
 # ======================
 # UTILITAIRES
@@ -101,60 +102,6 @@ def clean_expired_sessions():
     updated = {u: t for u, t in active_users.items() if now - t < SESSION_TIMEOUT}
     save_active_users(updated)
     return updated
-
-# Tokens cumulés par utilisateur
-def load_tokens():
-    if not os.path.exists(TOKENS_FILE):
-        return {}
-    with open(TOKENS_FILE, "r") as f:
-        return json.load(f)
-
-def save_tokens(data):
-    with open(TOKENS_FILE, "w") as f:
-        json.dump(data, f, indent=2)
-
-# Historique complet
-def add_tokens_history(username, prompt_tokens, completion_tokens):
-    if not os.path.exists(HISTORY_FILE):
-        history = []
-    else:
-        with open(HISTORY_FILE, "r") as f:
-            history = json.load(f)
-
-    total_tokens = prompt_tokens + completion_tokens
-    cost = (total_tokens / 1000) * TOKEN_COST_PER_1K
-
-    history.append({
-        "timestamp": time.time(),
-        "user": username,
-        "prompt": prompt_tokens,
-        "completion": completion_tokens,
-        "total": total_tokens,
-        "cost": cost
-    })
-
-    with open(HISTORY_FILE, "w") as f:
-        json.dump(history, f, indent=2)
-
-# Mise à jour cumulée
-def add_tokens(username, prompt_tokens, completion_tokens):
-    data = load_tokens()
-    if username not in data:
-        data[username] = {
-            "prompt": 0,
-            "completion": 0,
-            "total": 0,
-            "cost": 0.0
-        }
-    data[username]["prompt"] += prompt_tokens
-    data[username]["completion"] += completion_tokens
-    data[username]["total"] += prompt_tokens + completion_tokens
-    data[username]["cost"] = (data[username]["total"] / 1000) * TOKEN_COST_PER_1K
-    save_tokens(data)
-
-def count_tokens(text, model="gpt-4o-mini"):
-    enc = tiktoken.encoding_for_model(model)
-    return len(enc.encode(text))
 
 def text_to_image(text, width=600):
     font = ImageFont.load_default()
@@ -202,7 +149,7 @@ USERS = load_users()
 active_users = clean_expired_sessions()
 
 # ======================
-# LOGIN
+# LOGIN (1 clic)
 # ======================
 if not st.session_state.connected:
     st.title("🔐 Connexion élève")
@@ -225,6 +172,7 @@ if not st.session_state.connected:
                 st.error("Identifiant ou mot de passe incorrect")
     st.stop()
 
+# 🔁 MAJ SESSION ACTIVE (ANTI DOUBLE CONNEXION)
 active_users = load_active_users()
 active_users[st.session_state.username] = time.time()
 save_active_users(active_users)
@@ -234,6 +182,9 @@ save_active_users(active_users)
 # ======================
 st.title("🧠 BiNo, mon Assistant Pédagogique")
 
+# ======================
+# DECONNEXION (1 clic)
+# ======================
 with st.form("logout_form"):
     submitted_logout = st.form_submit_button("🚪 Déconnexion")
     if submitted_logout:
@@ -248,6 +199,7 @@ with st.form("logout_form"):
         st.session_state.chat_history = []
         st.stop()
 
+# ✅ COLONNES 50/50
 col_doc, col_chat = st.columns([1, 1])
 
 # ======================
@@ -255,7 +207,9 @@ col_doc, col_chat = st.columns([1, 1])
 # ======================
 with col_doc:
     st.subheader("📄 Document de travail")
-    uploaded_file = st.file_uploader("Dépose ton document", type=["txt", "docx", "pdf"])
+    uploaded_file = st.file_uploader(
+        "Dépose ton document", type=["txt", "docx", "pdf"]
+    )
 
     if uploaded_file:
         content = ""
@@ -304,11 +258,6 @@ with col_chat:
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": mots_cles}]
             )
-            prompt_tokens = count_tokens(mots_cles)
-            completion_tokens = count_tokens(response.choices[0].message.content)
-            add_tokens(st.session_state.username, prompt_tokens, completion_tokens)
-            add_tokens_history(st.session_state.username, prompt_tokens, completion_tokens)
-
             st.markdown("**📚 Rappel de cours :**")
             st.markdown(fix_latex_for_streamlit(response.choices[0].message.content))
 
@@ -322,47 +271,18 @@ with col_chat:
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}]
             )
-
-            prompt_tokens = count_tokens(prompt)
-            completion_tokens = count_tokens(response.choices[0].message.content)
-            add_tokens(st.session_state.username, prompt_tokens, completion_tokens)
-            add_tokens_history(st.session_state.username, prompt_tokens, completion_tokens)
-
             st.session_state.chat_history.append(
                 {"question": q, "answer": response.choices[0].message.content}
             )
             st.session_state.question_input = ""
 
+    # 🔹 Chat : Enter envoie directement
     st.text_input("Ta question", key="question_input", on_change=submit_question)
 
     for msg in reversed(st.session_state.chat_history):
         st.markdown("**❓ Question :**")
         st.markdown(msg["question"])
         st.markdown("**🤖 Assistant :**")
+        st.markdown("**🤖 BiNo :**")
         st.markdown(fix_latex_for_streamlit(msg["answer"]))
         st.markdown("---")
-
-# ======================
-# ADMIN VIEW (totaux + historique)
-# ADMIN VIEW (CUMULS SEULS)
-# ======================
-if st.session_state.username == ADMIN_USER:
-    st.subheader("📊 Tokens cumulés par utilisateur (ADMIN)")
-    tokens_data = load_tokens()
-    if tokens_data:
-        for user, vals in tokens_data.items():
-            st.write(f"👤 {user} → Prompt: {vals['prompt']} | Completion: {vals['completion']} | Total: {vals['total']} | €: {vals['cost']:.4f}")
-    else:
-        st.write("Aucune donnée de tokens disponible.")
-
-    st.write("---")
-    st.subheader("📜 Historique complet des actions")
-    if os.path.exists(HISTORY_FILE):
-        with open(HISTORY_FILE, "r") as f:
-            history = json.load(f)
-        history = sorted(history, key=lambda x: x["timestamp"], reverse=True)
-        for entry in history:
-            timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(entry["timestamp"]))
-            st.write(f"{timestamp} | 👤 {entry['user']} → Prompt: {entry['prompt']} | Completion: {entry['completion']} | Total: {entry['total']} | €: {entry['cost']:.4f}")
-    else:
-        st.write("Aucune donnée d'historique disponible.")
