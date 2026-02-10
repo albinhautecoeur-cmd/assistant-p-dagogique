@@ -56,7 +56,6 @@ h1, h2, h3 { color: #1f3c88; }
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 # ======================
-# PROMPT PEDAGOGIQUE
 # PROMPT PEDAGOGIQUE CORRIGE
 # ======================
 PROMPT_PEDAGOGIQUE = """
@@ -74,7 +73,6 @@ REGLES ABSOLUES :
 FORMAT OBLIGATOIRE :
 1) Reformule la question de l'exercice.
 2) Donne UN indice.
-3) Continue à donner des indices de plus en plus proche de la réponse.
 3) Continue à donner des indices de plus enplus proche de la réponse.
 
 PARTIE RAPPEL :
@@ -82,7 +80,6 @@ PARTIE RAPPEL :
 - Jamais de methode complete.
 - Jamais de solution.
 
-FORMULES MATHEMATIQUES :
 FORMULES MATHEMATIQUES (OBLIGATOIRE) :
 - Toute expression mathematique DOIT etre entre \( ... \) ou \[ ... \]
 - Exemple correct : \( ax^2 + bx + c = 0 \)
@@ -106,7 +103,7 @@ Voici le document de l'eleve :
 def fix_latex_for_streamlit(text: str) -> str:
     # Encadre probabilités
     text = re.sub(r"(P\([^\)]*\))", r"\\(\1\\)", text)
-    
+
     # Encadre les equations classiques
     text = re.sub(r"(ax\^2 \+ bx \+ c = 0)", r"\\( \1 \\)", text)
     text = re.sub(r"(b\^2 - 4ac)", r"\\( \1 \\)", text)
@@ -210,17 +207,7 @@ def text_to_image(text, width=600):
         y += 20
     return img
 
-# ======================
-# FIX LATEX STRICT
-# ======================
 def fix_latex_for_streamlit(text: str) -> str:
-    text = text.replace("Δ", "\\Delta")
-    text = text.replace("∩", "\\cap")
-    text = text.replace("̅", "\\overline")
-    text = re.sub(r"(?<!\$)(P\([^\)]*\))", r"$\1$", text)
-    text = re.sub(r"(?<!\$)(ax\^2 \+ bx \+ c = 0)", r"$\1$", text)
-    text = re.sub(r"(?<!\$)(b\^2 - 4ac)", r"$\1$", text)
-    text = re.sub(r"(?<!\$)(x\s*=\s*\\frac\{-b\s*\\pm\s*\\sqrt\{D\}\}\{2a\})", r"$\1$", text)
     text = re.sub(r"\\\[(.*?)\\\]", r"$$\1$$", text, flags=re.S)
     text = re.sub(r"\\\((.*?)\\\)", r"$\1$", text, flags=re.S)
     return text
@@ -255,9 +242,6 @@ if not st.session_state.connected:
                 st.error("Identifiant ou mot de passe incorrect")
     st.stop()
 
-# ======================
-# SESSION ACTIVE
-# ======================
 active_users = load_active_users()
 active_users[st.session_state.username] = time.time()
 save_active_users(active_users)
@@ -331,10 +315,6 @@ with col_chat:
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": mots_cles}]
             )
-            # ✅ récupération sécurisée des tokens
-            prompt_tokens = getattr(getattr(response, "usage", None), "prompt_tokens", count_tokens(mots_cles))
-            completion_tokens = getattr(getattr(response, "usage", None), "completion_tokens", count_tokens(response.choices[0].message.content))
-            add_tokens(etab, prompt_tokens, completion_tokens)
             add_tokens(etab, count_tokens(mots_cles), count_tokens(response.choices[0].message.content))
             st.markdown(fix_latex_for_streamlit(response.choices[0].message.content))
 
@@ -348,11 +328,6 @@ with col_chat:
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}]
             )
-            # ✅ récupération sécurisée des tokens
-            prompt_tokens = getattr(getattr(response, "usage", None), "prompt_tokens", count_tokens(prompt))
-            completion_tokens = getattr(getattr(response, "usage", None), "completion_tokens", count_tokens(response.choices[0].message.content))
-            add_tokens(etab, prompt_tokens, completion_tokens)
-
             add_tokens(etab, count_tokens(prompt), count_tokens(response.choices[0].message.content))
             st.session_state.chat_history.append({"question": q, "answer": response.choices[0].message.content})
             st.session_state.question_input = ""
@@ -374,3 +349,4 @@ if st.session_state.username == ADMIN_USER:
     for folder in os.listdir(TOKENS_DIR):
         data = load_tokens(folder)
         st.write(f"🏫 {folder} → Prompt: {data['prompt']} | Completion: {data['completion']} | Total: {data['total']} | €: {data['cost']:.4f}")
+
