@@ -55,83 +55,28 @@ h1, h2, h3 { color: #1f3c88; }
 
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
-# ======================
-# PROMPT PEDAGOGIQUE CORRIGE
-# ======================
 PROMPT_PEDAGOGIQUE = """
-Tu es un assistant pedagogique bienveillant et patient.
+Tu es un assistant pédagogique bienveillant.
+Explique clairement, simplement, avec des exemples si nécessaire.
+Ne dépasse pas 60 mots que ce soit pour les rappels ou pour la réponse chat.
+Tu ne donnes jamais la réponse directement, tu guides progressivement l'élève.
+Quand tu écris des formules mathématiques :
+- utilise \( ... \) pour les formules en ligne
+- utilise \[ ... \] pour les formules en bloc
+- n’utilise jamais de blocs de code LaTeX
 
-REGLES ABSOLUES :
-- Tu ne donnes JAMAIS la reponse finale.
-- Tu aides uniquement avec des indices progressifs.
-- Tu ne depasses JAMAIS 60 mots même dans les rappels et au pire tu ne donnes qu'une partie de l'information.
-- Tu restes poli et encourageant.
-- Tu refuses toute question sur la religion, la pornographie ou les sujets sensibles.
-- Tu n'affiches JAMAIS de code informatique.
-
-FORMAT OBLIGATOIRE :
-1) Reformule la question de l'exercice.
-2) Donne UN indice.
-3) Continue à donner des indices de plus enplus proche de la réponse.
-
-PARTIE RAPPEL :
-- Rappel tres court pas plus de 60 mots.
-- Jamais de methode complete.
-- Jamais de solution.
-
-FORMULES MATHEMATIQUES (OBLIGATOIRE) :
-- Toute expression mathematique DOIT etre entre \( ... \) ou \[ ... \]
-- Exemple correct : \( ax^2 + bx + c = 0 \)
-- Exemple correct : \( \Delta = b^2 - 4ac \)
-- Exemple interdit : ax^2 + bx + c = 0
-- Exemple interdit : Δ = b^2 - 4ac
-
-Si tu ecris une formule sans delimiteur, tu dois la reformuler.
-
-INTERDICTIONS :
-- jamais de solution
-- jamais de code
-- jamais plus de 60 mots
-
-Voici le document de l'eleve :
+Voici le document de l'élève :
 """
-
-# ======================
-# FIX LATEX STRICT POUR STREAMLIT
-# ======================
-def fix_latex_for_streamlit(text: str) -> str:
-    # Encadre probabilités
-    text = re.sub(r"(P\([^\)]*\))", r"\\(\1\\)", text)
-
-    # Encadre les equations classiques
-    text = re.sub(r"(ax\^2 \+ bx \+ c = 0)", r"\\( \1 \\)", text)
-    text = re.sub(r"(b\^2 - 4ac)", r"\\( \1 \\)", text)
-    text = re.sub(r"(\\Delta\s*=\s*b\^2\s*-\s*4ac)", r"\\( \1 \\)", text)
-
-    # Remplace Delta unicode par LaTeX
-    text = text.replace("Δ", "\\Delta")
-
-    # Formule quadratique
-    text = re.sub(r"x\s*=\s*\\frac\{-b\s*\\pm\s*\\sqrt\{D\}\}\{2a\}",
-                  r"\\( x = \\frac{-b \\pm \\sqrt{D}}{2a} \\)", text)
-
-    # Corrige les anciens formats
-    text = re.sub(r"\\\[(.*?)\\\]", r"$$\1$$", text, flags=re.S)
-    text = re.sub(r"\\\((.*?)\\\)", r"$\1$", text, flags=re.S)
-
-    return text
-
 
 USERS_FILE = "users.json"
 ACTIVE_USERS_FILE = "active_users.json"
-TOKENS_DIR = "tokens"
+TOKENS_FILE = "tokens.json"
+HISTORY_FILE = "tokens_history.json"
 SESSION_TIMEOUT = 60
 ADMIN_USER = "ahautecoeur2"
 
-TOKEN_COST_PER_1K = 0.0015
-TOKEN_COST_PER_1K = 0.0003
-
-os.makedirs(TOKENS_DIR, exist_ok=True)
+# Prix par 1000 tokens pour gpt-4o-mini
+TOKEN_COST_PER_1K = 0.0015  # € par 1000 tokens
 
 # ======================
 # UTILITAIRES
@@ -139,45 +84,6 @@ os.makedirs(TOKENS_DIR, exist_ok=True)
 def load_users():
     with open(USERS_FILE, "r") as f:
         return json.load(f)
-
-def get_password(user):
-    if isinstance(USERS[user], dict):
-        return USERS[user]["password"]
-    return USERS[user]
-
-def get_etablissement(user):
-    if isinstance(USERS[user], dict):
-        return USERS[user].get("etablissement", "etablissement_defaut")
-    return "etablissement_defaut"
-
-def get_token_file(etab):
-    path = os.path.join(TOKENS_DIR, etab)
-    os.makedirs(path, exist_ok=True)
-    return os.path.join(path, "tokens.json")
-
-def load_tokens(etab):
-    file = get_token_file(etab)
-    if not os.path.exists(file):
-        return {"prompt": 0, "completion": 0, "total": 0, "cost": 0.0}
-    with open(file, "r") as f:
-        return json.load(f)
-
-def save_tokens(etab, data):
-    file = get_token_file(etab)
-    with open(file, "w") as f:
-        json.dump(data, f, indent=2)
-
-def add_tokens(etab, prompt_tokens, completion_tokens):
-    data = load_tokens(etab)
-    data["prompt"] += prompt_tokens
-    data["completion"] += completion_tokens
-    data["total"] += prompt_tokens + completion_tokens
-    data["cost"] = (data["total"] / 1000) * TOKEN_COST_PER_1K
-    save_tokens(etab, data)
-
-def count_tokens(text, model="gpt-4o-mini"):
-    enc = tiktoken.encoding_for_model(model)
-    return len(enc.encode(text))
 
 def load_active_users():
     if not os.path.exists(ACTIVE_USERS_FILE):
@@ -196,21 +102,98 @@ def clean_expired_sessions():
     save_active_users(updated)
     return updated
 
+# Tokens cumulés par utilisateur
+def load_tokens():
+    if not os.path.exists(TOKENS_FILE):
+        return {}
+    with open(TOKENS_FILE, "r") as f:
+        return json.load(f)
+
+def save_tokens(data):
+    with open(TOKENS_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
+# Historique complet
+def add_tokens_history(username, prompt_tokens, completion_tokens):
+    if not os.path.exists(HISTORY_FILE):
+        history = []
+    else:
+        with open(HISTORY_FILE, "r") as f:
+            history = json.load(f)
+
+    total_tokens = prompt_tokens + completion_tokens
+    cost = (total_tokens / 1000) * TOKEN_COST_PER_1K
+
+    history.append({
+        "timestamp": time.time(),
+        "user": username,
+        "prompt": prompt_tokens,
+        "completion": completion_tokens,
+        "total": total_tokens,
+        "cost": cost
+    })
+
+    with open(HISTORY_FILE, "w") as f:
+        json.dump(history, f, indent=2)
+
+# Mise à jour cumulée
+def add_tokens(username, prompt_tokens, completion_tokens):
+    data = load_tokens()
+    if username not in data:
+        data[username] = {
+            "prompt": 0,
+            "completion": 0,
+            "total": 0,
+            "cost": 0.0
+        }
+    data[username]["prompt"] += prompt_tokens
+    data[username]["completion"] += completion_tokens
+    data[username]["total"] += prompt_tokens + completion_tokens
+    data[username]["cost"] = (data[username]["total"] / 1000) * TOKEN_COST_PER_1K
+    save_tokens(data)
+
+def count_tokens(text, model="gpt-4o-mini"):
+    enc = tiktoken.encoding_for_model(model)
+    return len(enc.encode(text))
+
 def text_to_image(text, width=600):
     font = ImageFont.load_default()
     lines = text.split("\n")
-    img = Image.new("RGB", (width, 20 * len(lines)), "white")
+    dummy_img = Image.new("RGB", (width, 1000))
+    draw = ImageDraw.Draw(dummy_img)
+    line_height = draw.textbbox((0,0), "Hg", font=font)[3] + 4
+    height = line_height * len(lines) + 20
+    img = Image.new("RGB", (width, height), "white")
     draw = ImageDraw.Draw(img)
-    y = 5
+    y = 10
     for line in lines:
         draw.text((10, y), line, fill="black", font=font)
-        y += 20
+        y += line_height
     return img
 
+# ======================
+# FIX LATEX
+# ======================
 def fix_latex_for_streamlit(text: str) -> str:
+    text = re.sub(r"I\s*\n\s*0", r"I_0", text)
+    text = re.sub(r"10\s*\n\s*-\s*12", r"10^{-12}", text)
+    text = re.sub(r"W\s*/\s*m\s*2", r"\\text{W/m}^2", text)
     text = re.sub(r"\\\[(.*?)\\\]", r"$$\1$$", text, flags=re.S)
     text = re.sub(r"\\\((.*?)\\\)", r"$\1$", text, flags=re.S)
-    return text
+    lines = text.split("\n")
+    fixed_lines = []
+    for line in lines:
+        stripped = line.strip()
+        is_math_line = (
+            "\\" in stripped
+            and any(cmd in stripped for cmd in ["\\sqrt", "\\frac", "\\log"])
+            and "=" in stripped
+        )
+        if is_math_line and not stripped.startswith("$"):
+            fixed_lines.append(f"$$\n{stripped}\n$$")
+        else:
+            fixed_lines.append(line)
+    return "\n".join(fixed_lines)
 
 # ======================
 # CHARGEMENT UTILISATEURS
@@ -229,7 +212,7 @@ if not st.session_state.connected:
         submitted_login = st.form_submit_button("Connexion")
         if submitted_login:
             active_users = clean_expired_sessions()
-            if username_input in USERS and get_password(username_input) == password_input:
+            if username_input in USERS and USERS[username_input] == password_input:
                 if username_input in active_users:
                     st.error("❌ Ce compte est déjà connecté sur un autre appareil.")
                 else:
@@ -245,8 +228,6 @@ if not st.session_state.connected:
 active_users = load_active_users()
 active_users[st.session_state.username] = time.time()
 save_active_users(active_users)
-
-etab = get_etablissement(st.session_state.username)
 
 # ======================
 # INTERFACE
@@ -288,6 +269,13 @@ with col_doc:
             doc = docx.Document(uploaded_file)
             content = "\n".join([p.text for p in doc.paragraphs])
             images = [text_to_image(content)]
+            for rel in doc.part._rels:
+                rel_obj = doc.part._rels[rel]
+                if "image" in rel_obj.target_ref:
+                    image_data = rel_obj.target_part.blob
+                    img = Image.open(io.BytesIO(image_data))
+                    img.thumbnail((600, 800))
+                    images.append(img)
 
         elif uploaded_file.name.endswith(".pdf"):
             pdf_bytes = uploaded_file.read()
@@ -296,6 +284,7 @@ with col_doc:
                 content += page.get_text()
                 pix = page.get_pixmap()
                 img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                img.thumbnail((600, 800))
                 images.append(img)
 
         st.session_state.document_content = content
@@ -315,7 +304,12 @@ with col_chat:
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": mots_cles}]
             )
-            add_tokens(etab, count_tokens(mots_cles), count_tokens(response.choices[0].message.content))
+            prompt_tokens = count_tokens(mots_cles)
+            completion_tokens = count_tokens(response.choices[0].message.content)
+            add_tokens(st.session_state.username, prompt_tokens, completion_tokens)
+            add_tokens_history(st.session_state.username, prompt_tokens, completion_tokens)
+
+            st.markdown("**📚 Rappel de cours :**")
             st.markdown(fix_latex_for_streamlit(response.choices[0].message.content))
 
     st.subheader("💬 Chat pédagogique")
@@ -328,8 +322,15 @@ with col_chat:
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}]
             )
-            add_tokens(etab, count_tokens(prompt), count_tokens(response.choices[0].message.content))
-            st.session_state.chat_history.append({"question": q, "answer": response.choices[0].message.content})
+
+            prompt_tokens = count_tokens(prompt)
+            completion_tokens = count_tokens(response.choices[0].message.content)
+            add_tokens(st.session_state.username, prompt_tokens, completion_tokens)
+            add_tokens_history(st.session_state.username, prompt_tokens, completion_tokens)
+
+            st.session_state.chat_history.append(
+                {"question": q, "answer": response.choices[0].message.content}
+            )
             st.session_state.question_input = ""
 
     st.text_input("Ta question", key="question_input", on_change=submit_question)
@@ -337,15 +338,31 @@ with col_chat:
     for msg in reversed(st.session_state.chat_history):
         st.markdown("**❓ Question :**")
         st.markdown(msg["question"])
-        st.markdown("**🤖 BiNo :**")
+        st.markdown("**🤖 Assistant :**")
         st.markdown(fix_latex_for_streamlit(msg["answer"]))
         st.markdown("---")
 
 # ======================
-# ADMIN VIEW (PAR ÉTABLISSEMENT)
+# ADMIN VIEW (totaux + historique)
+# ADMIN VIEW (CUMULS SEULS)
 # ======================
 if st.session_state.username == ADMIN_USER:
-    st.subheader("📊 Tokens cumulés par établissement")
-    for folder in os.listdir(TOKENS_DIR):
-        data = load_tokens(folder)
-        st.write(f"🏫 {folder} → Prompt: {data['prompt']} | Completion: {data['completion']} | Total: {data['total']} | €: {data['cost']:.4f}")
+    st.subheader("📊 Tokens cumulés par utilisateur (ADMIN)")
+    tokens_data = load_tokens()
+    if tokens_data:
+        for user, vals in tokens_data.items():
+            st.write(f"👤 {user} → Prompt: {vals['prompt']} | Completion: {vals['completion']} | Total: {vals['total']} | €: {vals['cost']:.4f}")
+    else:
+        st.write("Aucune donnée de tokens disponible.")
+
+    st.write("---")
+    st.subheader("📜 Historique complet des actions")
+    if os.path.exists(HISTORY_FILE):
+        with open(HISTORY_FILE, "r") as f:
+            history = json.load(f)
+        history = sorted(history, key=lambda x: x["timestamp"], reverse=True)
+        for entry in history:
+            timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(entry["timestamp"]))
+            st.write(f"{timestamp} | 👤 {entry['user']} → Prompt: {entry['prompt']} | Completion: {entry['completion']} | Total: {entry['total']} | €: {entry['cost']:.4f}")
+    else:
+        st.write("Aucune donnée d'historique disponible.")
